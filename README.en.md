@@ -7,9 +7,6 @@
 
 **简体中文** | [English](./README.en.md)
 
-![Linker Monitor Screenshot](https://example.com/screenshot.png)  
-*(Please replace with your project screenshot)*
-
 ## ✨ Key Features
 
 - **Real-time Status Monitoring**: View CPU, memory, disk usage, system load, network speed, and other key metrics in real-time.

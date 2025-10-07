@@ -1444,7 +1444,7 @@
             outages.forEach(outage => {
                 const node = nodes.find(n => n.id == outage.server_id);
                 const nodeName = node ? `${getFlagEmoji(node.country_code)} ${node.name}` : outage.server_id;
-                const startTime = new Date(outage.start_time * 1000).toLocaleString(currentLang.startsWith('zh') ? 'zh-CN' : undefined);
+                const startTime = new Date(outage.start_time * 1000).toLocaleString(navigator.language.startsWith('zh') ? 'zh-CN' : undefined);
                 let content = outage.content;
                 if (outage.end_time) {
                     content += `<br>已恢复，持续时间约 ${formatDuration(outage.end_time - outage.start_time)}.`;

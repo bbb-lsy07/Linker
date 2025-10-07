@@ -1,8 +1,8 @@
 <?php
 session_start();
 // 如果 config.php 不存在，则重定向到安装程序
-if (!file_exists('./../config.php')) {
-    header('Location: setup.php');
+if (!file_exists(__DIR__ . '/../config.php')) {
+    header('Location: /setup.php');
     exit;
 }
 
@@ -12,20 +12,12 @@ if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
     exit;
 }
 
-require_once __DIR__ . './../config.php';
+require_once __DIR__ . '/../includes/bootstrap.php';
 $error_message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        if ($db_config['type'] === 'pgsql') {
-            $cfg = $db_config['pgsql'];
-            $dsn = "pgsql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['dbname']}";
-            $pdo = new PDO($dsn, $cfg['user'], $cfg['password']);
-        } else {
-            $dsn = 'sqlite:' . $db_config['sqlite']['path'];
-            $pdo = new PDO($dsn);
-        }
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo = get_pdo_connection();
 
         $username = $_POST['username'] ?? '';
         $password = $_POST['password'] ?? '';

@@ -2,6 +2,16 @@
 // setup.php - Linker Monitor Interactive Installer v2.0
 error_reporting(0); // Mute warnings during initial checks
 
+// --- [新增] 环境检查 ---
+$php_version_ok = version_compare(PHP_VERSION, '7.4.0', '>=');
+$pdo_ok = extension_loaded('pdo');
+$pdo_sqlite_ok = extension_loaded('pdo_sqlite');
+$pdo_mysql_ok = extension_loaded('pdo_mysql');
+$pdo_pgsql_ok = extension_loaded('pdo_pgsql');
+$env_checks_passed = $php_version_ok && $pdo_ok && ($pdo_sqlite_ok || $pdo_mysql_ok || $pdo_pgsql_ok);
+// --------------------
+
+// 将配置文件路径指向项目的根目录
 $configFile = __DIR__ . '/config.php';
 $step = 1;
 $error_message = '';
@@ -123,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_setup'])) {
                         net_up_speed BIGINT, net_down_speed BIGINT, total_up BIGINT, total_down BIGINT,
                         uptime VARCHAR(255), load_avg REAL, processes INT, connections INT
                     );
+                    CREATE INDEX IF NOT EXISTS server_time_idx ON server_stats (server_id, timestamp);
                     CREATE TABLE IF NOT EXISTS server_status (id VARCHAR(255) PRIMARY KEY, is_online BOOLEAN NOT NULL DEFAULT false, last_checked BIGINT);
                     CREATE TABLE IF NOT EXISTS outages (id SERIAL PRIMARY KEY, server_id VARCHAR(255) NOT NULL, start_time BIGINT, end_time BIGINT, title VARCHAR(255), content TEXT);
                     CREATE TABLE IF NOT EXISTS settings (key VARCHAR(255) PRIMARY KEY, value TEXT);
@@ -142,11 +153,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_setup'])) {
                         cpu_usage FLOAT, mem_usage_percent FLOAT, disk_usage_percent FLOAT,
                         net_up_speed BIGINT, net_down_speed BIGINT, total_up BIGINT, total_down BIGINT,
                         uptime VARCHAR(255), load_avg FLOAT, processes INT, connections INT,
-                        INDEX(server_id)
+                        INDEX server_time_idx (server_id, timestamp)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                     CREATE TABLE IF NOT EXISTS server_status (id VARCHAR(255) PRIMARY KEY, is_online TINYINT(1) NOT NULL DEFAULT 0, last_checked BIGINT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                     CREATE TABLE IF NOT EXISTS outages (id INT AUTO_INCREMENT PRIMARY KEY, server_id VARCHAR(255) NOT NULL, start_time BIGINT, end_time BIGINT, title VARCHAR(255), content TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-                    CREATE TABLE IF NOT EXISTS settings (key_name VARCHAR(255) PRIMARY KEY, value TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                    CREATE TABLE IF NOT EXISTS settings (`key` VARCHAR(255) PRIMARY KEY, value TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                     CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(255) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 ");
             } else { // sqlite
@@ -163,6 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_setup'])) {
                         net_up_speed INTEGER, net_down_speed INTEGER, total_up INTEGER, total_down INTEGER,
                         uptime TEXT, load_avg REAL, processes INTEGER, connections INTEGER
                     );
+                    CREATE INDEX IF NOT EXISTS server_time_idx ON server_stats (server_id, timestamp);
                     CREATE TABLE IF NOT EXISTS server_status (id TEXT PRIMARY KEY, is_online INTEGER DEFAULT 0, last_checked INTEGER);
                     CREATE TABLE IF NOT EXISTS outages (id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT, start_time INTEGER, end_time INTEGER, title TEXT, content TEXT);
                     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -175,8 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_setup'])) {
             $stmt = $pdo->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
             $stmt->execute([$admin_user, $hashed_password]);
             
-            $key_column = ($db_type === 'mysql') ? 'key_name' : 'key';
-            $stmt = $pdo->prepare("INSERT INTO settings ({$key_column}, value) VALUES (?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO settings (`key`, value) VALUES (?, ?)");
             $stmt->execute(['site_name', $site_name]);
 
 
@@ -219,6 +230,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_setup'])) {
     <div class="container">
         <h1>灵刻监控 安装</h1>
 
+        <?php if (!$env_checks_passed): ?>
+            <div class="error-message">
+                <h4>环境不满足要求</h4>
+                <ul>
+                    <?php if (!$php_version_ok): ?><li>PHP 版本需要 >= 7.4 (当前: <?php echo PHP_VERSION; ?>)</li><?php endif; ?>
+                    <?php if (!$pdo_ok): ?><li>缺少 PHP 扩展: pdo</li><?php endif; ?>
+                    <?php if (!$pdo_sqlite_ok && !$pdo_mysql_ok && !$pdo_pgsql_ok): ?>
+                        <li>至少需要以下 PHP 扩展中的一个: pdo_sqlite, pdo_mysql, pdo_pgsql</li>
+                    <?php endif; ?>
+                </ul>
+                <p>请安装所需扩展后再刷新此页面。</p>
+            </div>
+        <?php endif; ?>
+
         <?php if ($step === 'complete' || $step === 'deleted'): ?>
             <div class="message">
                 <?php echo $step === 'deleted' ? htmlspecialchars($message) : '安装成功！'; ?>
@@ -234,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_setup'])) {
             </form>
             <?php endif; ?>
         
-        <?php else: ?>
+        <?php elseif ($env_checks_passed): // [修改] 仅在环境检查通过时显示表单 ?>
             <?php if ($error_message): ?><p class="error-message"><?php echo htmlspecialchars($error_message); ?></p><?php endif; ?>
             
             <form method="post">

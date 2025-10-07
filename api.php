@@ -3,32 +3,7 @@
 ini_set('display_errors', 0);
 error_reporting(0);
 header('Content-Type: application/json');
-require_once __DIR__ . '/config.php';
-
-function get_pdo_connection() {
-    global $db_config;
-    try {
-        if ($db_config['type'] === 'pgsql') {
-            $cfg = $db_config['pgsql'];
-            $dsn = "pgsql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['dbname']}";
-            return new PDO($dsn, $cfg['user'], $cfg['password']);
-        } elseif ($db_config['type'] === 'mysql') {
-            $cfg = $db_config['mysql'];
-            $dsn = "mysql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['dbname']};charset=utf8mb4";
-            return new PDO($dsn, $cfg['user'], $cfg['password']);
-        } else { // sqlite
-            $dsn = 'sqlite:' . $db_config['sqlite']['path'];
-            $pdo = new PDO($dsn);
-            $pdo->exec('PRAGMA journal_mode = WAL;');
-            return $pdo;
-        }
-    } catch (PDOException $e) {
-        error_log("Database connection failed: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['error' => 'Database connection failed. Check server logs.']);
-        exit;
-    }
-}
+require_once __DIR__ . '/includes/bootstrap.php';
 
 $action = $_GET['action'] ?? 'get_all';
 $server_id = $_GET['id'] ?? null;
@@ -64,8 +39,7 @@ try {
             'site_name' => '灵刻监控'
         ];
         
-        $key_column = ($db_config['type'] === 'mysql') ? 'key_name' : 'key';
-        $stmt_site_name = $pdo->prepare("SELECT value FROM settings WHERE {$key_column} = 'site_name'");
+        $stmt_site_name = $pdo->prepare("SELECT value FROM settings WHERE `key` = 'site_name'");
         $stmt_site_name->execute();
         if ($site_name = $stmt_site_name->fetchColumn()) {
             $response['site_name'] = $site_name;

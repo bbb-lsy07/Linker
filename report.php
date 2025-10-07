@@ -4,32 +4,7 @@ error_reporting(0);
 ini_set('display_errors', 0);
 
 header('Content-Type: application/json');
-require_once __DIR__ . '/config.php';
-
-function get_pdo_connection() {
-    global $db_config;
-    if (empty($db_config)) throw new Exception("Database config is missing.");
-    
-    try {
-        if ($db_config['type'] === 'pgsql') {
-            $cfg = $db_config['pgsql'];
-            $dsn = "pgsql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['dbname']}";
-            return new PDO($dsn, $cfg['user'], $cfg['password']);
-        } elseif ($db_config['type'] === 'mysql') {
-            $cfg = $db_config['mysql'];
-            $dsn = "mysql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['dbname']};charset=utf8mb4";
-            return new PDO($dsn, $cfg['user'], $cfg['password']);
-        } else { // sqlite
-            $dsn = 'sqlite:' . $db_config['sqlite']['path'];
-            $pdo = new PDO($dsn);
-            $pdo->exec('PRAGMA journal_mode = WAL;');
-            return $pdo;
-        }
-    } catch (PDOException $e) {
-        error_log("report.php - DB Connection Failed: " . $e->getMessage());
-        throw new Exception("Database connection failed.");
-    }
-}
+require_once __DIR__ . '/includes/bootstrap.php';
 
 $input = json_decode(file_get_contents('php://input'), true);
 if (!$input) {

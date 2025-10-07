@@ -84,13 +84,46 @@ foreach ($stats_updates as $column => $sql) {
 }
 
 
+// --- 添加性能优化索引 ---
+$index_sqls = [];
+
+// 检查并添加 server_stats 表的复合索引
+try {
+    if ($db_type === 'mysql') {
+        $stmt = $pdo->prepare("SHOW INDEX FROM server_stats WHERE Key_name = 'server_time_idx'");
+        $stmt->execute();
+        $index_exists = $stmt->fetch() !== false;
+    } elseif ($db_type === 'pgsql') {
+        $stmt = $pdo->prepare("SELECT 1 FROM pg_indexes WHERE tablename = 'server_stats' AND indexname = 'server_time_idx'");
+        $stmt->execute();
+        $index_exists = $stmt->fetch() !== false;
+    } else { // sqlite
+        $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='server_time_idx'");
+        $stmt->execute();
+        $index_exists = $stmt->fetch() !== false;
+    }
+    
+    if (!$index_exists) {
+        $index_sqls[] = "CREATE INDEX server_time_idx ON server_stats (server_id, timestamp)";
+        echo "准备添加 server_stats 表的性能优化索引。\n";
+    } else {
+        echo "索引 'server_time_idx' 已存在于 'server_stats' 表中，跳过。\n";
+    }
+} catch (Exception $e) {
+    echo "检查索引时发生错误: " . $e->getMessage() . "\n";
+}
+
 // Execute all necessary SQLs
-if (empty($sqls)) {
+if (empty($sqls) && empty($index_sqls)) {
     echo "\n数据库结构已是最新，无需更新。\n";
 } else {
     try {
         $pdo->beginTransaction();
         foreach ($sqls as $sql) {
+            $pdo->exec($sql);
+            echo "执行: $sql\n";
+        }
+        foreach ($index_sqls as $sql) {
             $pdo->exec($sql);
             echo "执行: $sql\n";
         }

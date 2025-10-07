@@ -19,10 +19,6 @@
         header h1 { font-size: 22px; font-weight: normal; }
         .header-controls { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
         .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-        .language-selector { display: flex; gap: 8px; }
-        .language-selector a { color: var(--text-color); text-decoration: none; font-size: 13px; padding: 4px 8px; border-radius: 3px; transition: background-color 0.2s; }
-        .language-selector a:hover { background-color: var(--button-bg); }
-        .language-selector a.active { font-weight: bold; background-color: var(--button-active-bg); color: var(--button-active-text); }
         .view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; overflow-y: auto; padding: 5px; }
         .view.active { opacity: 1; visibility: visible; }
         #map-view { display: flex; justify-content: center; align-items: center; }
@@ -106,13 +102,11 @@
         @media (min-width: 640px) { 
             .monitor-container { padding: 25px; } 
             header h1 { font-size: 24px; } 
-            .language-selector a { font-size: 14px; } 
             .controls button { font-size: 13px; padding: 7px 14px; }
         }
         @media (max-width: 768px) {
             .header-controls { flex-direction: column; align-items: flex-start; gap: 10px; }
             .controls { justify-content: flex-start; }
-            .language-selector { justify-content: flex-start; }
         }
     </style>
 </head>
@@ -120,17 +114,13 @@
 
     <div class="monitor-container">
         <header>
-            <h1 id="site-title" data-lang="title">灵刻监控</h1>
+            <h1 id="site-title">灵刻监控</h1>
             <div class="header-controls">
                 <div class="controls">
-                    <button data-view="map" class="active" data-lang="btn_map">全球地图</button>
-                    <button data-view="standalones" data-lang="btn_standalones">独立服务器视图</button>
-                    <button data-view="outages" data-lang="btn_outages">最近的掉线记录</button>
+                    <button data-view="map" class="active">全球地图</button>
+                    <button data-view="standalones">独立服务器视图</button>
+                    <button data-view="outages">最近的掉线记录</button>
                 </div>
-                <nav class="language-selector">
-                    <a href="#" data-lang-code="en">English</a>
-                    <a href="#" data-lang-code="zh">简体中文</a>
-                </nav>
             </div>
         </header>
 
@@ -1099,7 +1089,7 @@
         </main>
 
         <footer>
-            <span id="copyright-footer">Copyright 2025 Linker. Powered by Linker.</span> <span data-lang="footer_suffix">每10秒更新.</span>
+            <span id="copyright-footer">Copyright 2025 Linker. Powered by Linker.</span> <span>每10秒更新.</span>
         </footer>
     </div>
     
@@ -1115,40 +1105,11 @@
     document.addEventListener('DOMContentLoaded', () => {
         let monitorData = { nodes: [], outages: [], site_name: '灵刻监控' };
         let activeButton = document.querySelector('.controls button[data-view="map"]');
-        let currentLang = 'zh';
         let signalInterval = null;
         let activeTags = new Set();
         let currentPage = 1;
         const itemsPerPage = 18;
 
-        const translations = {
-            en: {
-                title: 'Linker Monitor', btn_map: 'Global Map', btn_standalones: 'Server Cards', btn_outages: 'Recent Outages',
-                footer_suffix: 'Updates every 10 seconds.', error_loading: 'Failed to load data:', error_api_status: 'API returned status',
-                error_api_error: 'API Error:', stat_cpu: 'CPU', stat_mem: 'Memory', stat_disk: 'Disk', stat_net: 'Network',
-                stat_traffic: 'Traffic', stat_load: 'Load', stat_uptime: 'Uptime', modal_intro: 'Introduction', modal_price: 'Price',
-                price_yearly: 'Yearly', modal_cpu_chart: 'CPU Usage (%)', modal_mem_chart: 'Memory Usage (%)', modal_load_chart: 'System Load',
-                modal_net_chart: 'Network Speed (KB/s)', modal_proc_chart: 'Processes', modal_conn_chart: 'Connections',
-                outages_none: 'No outages recorded.', outages_recovered: 'Recovered, duration approx.', outages_minutes: 'minutes.',
-                outages_seconds: 'seconds', outages_hours: 'hours', outages_days: 'days', tooltip_anomaly: 'Status is anomalous',
-                map_anomaly: 'Server Offline', no_data_available: 'No data available', filter_by: 'Filter:', filter_all: 'All',
-                info_system: 'System', info_arch: 'Architecture', info_cpu: 'CPU Model', info_ram: 'RAM Size',
-                info_disk: 'Disk Size', info_outage: 'Outage Duration', loading_charts: 'Loading charts...'
-            },
-            zh: {
-                title: '灵刻监控', btn_map: '全球地图', btn_standalones: '独立服务器视图', btn_outages: '最近的掉线记录',
-                footer_suffix: '每10秒更新.', error_loading: '无法加载数据:', error_api_status: 'API 返回状态', error_api_error: 'API 错误:',
-                stat_cpu: 'CPU', stat_mem: '内存', stat_disk: '硬盘', stat_net: '网络', stat_traffic: '流量', stat_load: '负载', stat_uptime: '在线',
-                modal_intro: '简介', modal_price: '价格', price_yearly: '年付', modal_cpu_chart: 'CPU 使用率 (%)',
-                modal_mem_chart: '内存使用率 (%)', modal_load_chart: '系统负载', modal_net_chart: '网络速度 (KB/s)',
-                modal_proc_chart: '进程数', modal_conn_chart: '连接数', outages_none: '没有掉线记录。',
-                outages_recovered: '已恢复，持续时间约', outages_minutes: '分钟。', outages_seconds: '秒',
-                outages_hours: '小时', outages_days: '天', tooltip_anomaly: '状态异常', map_anomaly: '服务器掉线',
-                no_data_available: '无可用数据', filter_by: '筛选:', filter_all: '全部', info_system: '操作系统',
-                info_arch: '架构', info_cpu: 'CPU 型号', info_ram: '内存大小', info_disk: '磁盘大小', info_outage: '掉线时长',
-                loading_charts: '图表加载中...'
-            }
-        };
 
         const tooltip = document.getElementById('tooltip');
         const mapContainer = document.getElementById('world-map-container');
@@ -1156,26 +1117,7 @@
         const views = document.querySelectorAll('.view');
         const modalOverlay = document.getElementById('details-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
-        const langSelector = document.querySelector('.language-selector');
 
-        function setLanguage(lang) {
-            currentLang = lang;
-            document.querySelectorAll('[data-lang]').forEach(element => {
-                const key = element.getAttribute('data-lang');
-                if (translations[lang][key]) element.textContent = translations[lang][key];
-            });
-            document.documentElement.lang = lang;
-            localStorage.setItem('linkerLang', lang);
-            langSelector.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.langCode === lang));
-            if (monitorData.nodes.length > 0) renderAllViews();
-        }
-
-        langSelector.addEventListener('click', e => {
-            if (e.target.tagName === 'A') {
-                e.preventDefault();
-                setLanguage(e.target.dataset.langCode);
-            }
-        });
 
         function displayError(message) {
             const main = document.getElementById('main-content');
@@ -1186,15 +1128,15 @@
                 errorOverlay.className = 'error-overlay';
                 main.appendChild(errorOverlay);
             }
-            errorOverlay.innerHTML = `<pre><strong>${translations[currentLang].error_loading}</strong>\n${message}</pre>`;
+            errorOverlay.innerHTML = `<pre><strong>无法加载数据:</strong>\n${message}</pre>`;
         }
 
         async function fetchData() {
             try {
                 const response = await fetch('./api.php');
-                if (!response.ok) throw new Error(`${translations[currentLang].error_api_status} ${response.status}: ${await response.text()}`);
+                if (!response.ok) throw new Error(`API 返回状态 ${response.status}: ${await response.text()}`);
                 const data = await response.json();
-                if (data.error) throw new Error(`${translations[currentLang].error_api_error} ${data.error}`);
+                if (data.error) throw new Error(`API 错误: ${data.error}`);
                 
                 monitorData = data;
                 document.title = monitorData.site_name;
@@ -1214,11 +1156,11 @@
         }
 
         function formatDuration(seconds) {
-            if (!seconds) return `0 ${translations[currentLang].outages_seconds}`;
-            if (seconds < 60) return `${seconds} ${translations[currentLang].outages_seconds}`;
-            if (seconds < 3600) return `${Math.round(seconds / 60)} ${translations[currentLang].outages_minutes}`;
-            if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} ${translations[currentLang].outages_hours}`;
-            return `${(seconds / 86400).toFixed(1)} ${translations[currentLang].outages_days}`;
+            if (!seconds) return `0 秒`;
+            if (seconds < 60) return `${seconds} 秒`;
+            if (seconds < 3600) return `${Math.round(seconds / 60)} 分钟`;
+            if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} 小时`;
+            return `${(seconds / 86400).toFixed(1)} 天`;
         }
 
         function renderAllViews() {
@@ -1266,7 +1208,7 @@
                     circle.addEventListener('mouseenter', () => {
                         let content = `<strong>${getFlagEmoji(node.country_code)} ${node.name}</strong>`;
                         if (node.intro) content += `<br><span class="subtitle">${node.intro}</span>`;
-                        if (!node.is_online) content += `<br><span class="anomaly-subtitle">${node.anomaly_msg || translations[currentLang].tooltip_anomaly}</span>`;
+                        if (!node.is_online) content += `<br><span class="anomaly-subtitle">${node.anomaly_msg || '状态异常'}</span>`;
                         tooltip.innerHTML = content;
                         tooltip.style.display = 'block';
                     });
@@ -1320,19 +1262,19 @@
                         <div class="name">${getFlagEmoji(node.country_code)} ${node.name}</div>
                     </div>
                     <div class="stat-grid">
-                        <div class="label">${translations[currentLang].stat_cpu}</div>
+                        <div class="label">CPU</div>
                         <div class="progress-bar"><div class="progress-bar-inner progress-cpu" style="width: ${cpu.toFixed(0)}%;">${cpu.toFixed(0)}%</div></div>
-                        <div class="label">${translations[currentLang].stat_mem}</div>
+                        <div class="label">内存</div>
                         <div class="progress-bar"><div class="progress-bar-inner progress-mem" style="width: ${mem.toFixed(0)}%;">${mem.toFixed(0)}%</div></div>
-                        <div class="label">${translations[currentLang].stat_disk}</div>
+                        <div class="label">硬盘</div>
                         <div class="progress-bar"><div class="progress-bar-inner progress-disk" style="width: ${disk.toFixed(0)}%;">${disk.toFixed(0)}%</div></div>
-                        <div class="label">${translations[currentLang].stat_net}</div>
+                        <div class="label">网络</div>
                         <div class="value">↑ ${formatBytes(stats.net_up_speed || 0)}/s | ↓ ${formatBytes(stats.net_down_speed || 0)}/s</div>
-                        <div class="label">${translations[currentLang].stat_traffic}</div>
+                        <div class="label">流量</div>
                         <div class="value">↑ ${formatBytes(stats.total_up || 0)} | ↓ ${formatBytes(stats.total_down || 0)}</div>
-                        <div class="label">${translations[currentLang].stat_load}</div>
+                        <div class="label">负载</div>
                         <div class="value">${parseFloat(stats.load_avg || 0).toFixed(2)}</div>
-                        <div class="label">${isOffline ? translations[currentLang].info_outage : translations[currentLang].stat_uptime}</div>
+                        <div class="label">${isOffline ? '掉线时长' : '在线'}</div>
                         <div class="value">${uptime}</div>
                     </div>
                 `;
@@ -1364,9 +1306,9 @@
                 if (node.tags) node.tags.split(',').forEach(tag => tag.trim() && allTags.add(tag.trim()));
             });
 
-            container.innerHTML = `<strong>${translations[currentLang].filter_by} </strong>`;
+            container.innerHTML = `<strong>筛选: </strong>`;
             const allButton = document.createElement('button');
-            allButton.textContent = translations[currentLang].filter_all;
+            allButton.textContent = '全部';
             allButton.className = activeTags.size === 0 ? 'active' : '';
             allButton.onclick = () => { activeTags.clear(); currentPage = 1; renderAllViews(); };
             container.appendChild(allButton);
@@ -1393,23 +1335,23 @@
             modalBody.innerHTML = `
                 <div class="modal-header"><h2>${getFlagEmoji(node.country_code)} ${node.name}</h2></div>
                 <div class="modal-info-section">
-                     <div class="modal-info-item"><strong>${translations[currentLang].modal_intro}:</strong><p>${node.intro || 'N/A'}</p></div>
+                     <div class="modal-info-item"><strong>简介:</strong><p>${node.intro || 'N/A'}</p></div>
                      <div class="info-grid">
-                        <div class="modal-info-item"><strong>${translations[currentLang].info_system}:</strong><p>${node.system || 'N/A'}</p></div>
-                        <div class="modal-info-item"><strong>${translations[currentLang].info_arch}:</strong><p>${node.arch || 'N/A'}</p></div>
-                        <div class="modal-info-item"><strong>${translations[currentLang].info_cpu}:</strong><p>${node.cpu_model || 'N/A'}</p></div>
-                        <div class="modal-info-item"><strong>${translations[currentLang].info_ram}:</strong><p>${formatBytes(node.mem_total, 2) || 'N/A'}</p></div>
-                        <div class="modal-info-item"><strong>${translations[currentLang].info_disk}:</strong><p>${formatBytes(node.disk_total, 2) || 'N/A'}</p></div>
-                        ${isOffline ? `<div class="modal-info-item"><strong>${translations[currentLang].info_outage}:</strong><p>${formatDuration(node.outage_duration || 0)}</p></div>` : ''}
+                        <div class="modal-info-item"><strong>操作系统:</strong><p>${node.system || 'N/A'}</p></div>
+                        <div class="modal-info-item"><strong>架构:</strong><p>${node.arch || 'N/A'}</p></div>
+                        <div class="modal-info-item"><strong>CPU 型号:</strong><p>${node.cpu_model || 'N/A'}</p></div>
+                        <div class="modal-info-item"><strong>内存大小:</strong><p>${formatBytes(node.mem_total, 2) || 'N/A'}</p></div>
+                        <div class="modal-info-item"><strong>磁盘大小:</strong><p>${formatBytes(node.disk_total, 2) || 'N/A'}</p></div>
+                        ${isOffline ? `<div class="modal-info-item"><strong>掉线时长:</strong><p>${formatDuration(node.outage_duration || 0)}</p></div>` : ''}
                     </div>
                 </div>
                 <div class="chart-grid">
-                    <div class="chart-container"><h3>${translations[currentLang].modal_cpu_chart}</h3><div id="cpu-chart" class="chart-svg">${translations[currentLang].loading_charts}</div></div>
-                    <div class="chart-container"><h3>${translations[currentLang].modal_mem_chart}</h3><div id="mem-chart" class="chart-svg">${translations[currentLang].loading_charts}</div></div>
-                    <div class="chart-container"><h3>${translations[currentLang].modal_load_chart}</h3><div id="load-chart" class="chart-svg">${translations[currentLang].loading_charts}</div></div>
-                    <div class="chart-container"><h3>${translations[currentLang].modal_net_chart}</h3><div id="net-chart" class="chart-svg">${translations[currentLang].loading_charts}</div></div>
-                    <div class="chart-container"><h3>${translations[currentLang].modal_proc_chart}</h3><div id="proc-chart" class="chart-svg">${translations[currentLang].loading_charts}</div></div>
-                    <div class="chart-container"><h3>${translations[currentLang].modal_conn_chart}</h3><div id="conn-chart" class="chart-svg">${translations[currentLang].loading_charts}</div></div>
+                    <div class="chart-container"><h3>CPU 使用率 (%)</h3><div id="cpu-chart" class="chart-svg">图表加载中...</div></div>
+                    <div class="chart-container"><h3>内存使用率 (%)</h3><div id="mem-chart" class="chart-svg">图表加载中...</div></div>
+                    <div class="chart-container"><h3>系统负载</h3><div id="load-chart" class="chart-svg">图表加载中...</div></div>
+                    <div class="chart-container"><h3>网络速度 (KB/s)</h3><div id="net-chart" class="chart-svg">图表加载中...</div></div>
+                    <div class="chart-container"><h3>进程数</h3><div id="proc-chart" class="chart-svg">图表加载中...</div></div>
+                    <div class="chart-container"><h3>连接数</h3><div id="conn-chart" class="chart-svg">图表加载中...</div></div>
                 </div>`;
             modalOverlay.classList.add('active');
 
@@ -1430,7 +1372,7 @@
                 createSvgChart('conn-chart', history.map(h => ({ x: h.timestamp, y: h.connections })));
             } catch (err) {
                 console.error('Failed to load history:', err);
-                document.querySelector('.chart-grid').innerHTML = `<p style="color:red; text-align:center;">${translations[currentLang].error_loading}</p>`;
+                document.querySelector('.chart-grid').innerHTML = `<p style="color:red; text-align:center;">无法加载数据</p>`;
             }
         }
 
@@ -1452,7 +1394,7 @@
             }
 
             if (!datasets[0] || !datasets[0].data || datasets[0].data.length < 2) {
-                container.innerHTML = `<div style="text-align:center; padding-top: 60px; color: #999;">${translations[currentLang].no_data_available}</div>`;
+                container.innerHTML = `<div style="text-align:center; padding-top: 60px; color: #999;">无可用数据</div>`;
                 return;
             }
 
@@ -1496,7 +1438,7 @@
             const container = document.querySelector('#outages-view .timeline');
             container.innerHTML = '';
             if (!outages || outages.length === 0) {
-                container.innerHTML = `<p>${translations[currentLang].outages_none}</p>`;
+                container.innerHTML = `<p>没有掉线记录。</p>`;
                 return;
             }
             outages.forEach(outage => {
@@ -1505,7 +1447,7 @@
                 const startTime = new Date(outage.start_time * 1000).toLocaleString(currentLang.startsWith('zh') ? 'zh-CN' : undefined);
                 let content = outage.content;
                 if (outage.end_time) {
-                    content += `<br>${translations[currentLang].outages_recovered} ${formatDuration(outage.end_time - outage.start_time)}.`;
+                    content += `<br>已恢复，持续时间约 ${formatDuration(outage.end_time - outage.start_time)}.`;
                 }
                 const itemHTML = `<div class="timeline-item ${!outage.end_time ? 'critical' : ''}"><div class="time">${startTime}</div><div class="title">${outage.title} - ${nodeName}</div><div class="content">${content}</div></div>`;
                 container.innerHTML += itemHTML;
@@ -1579,8 +1521,6 @@
             }
         });
         
-        const savedLang = localStorage.getItem('linkerLang') || 'zh';
-        setLanguage(savedLang);
         startIntervals(); // Initial start of intervals
 
         mapContainer.addEventListener('mousemove', (e) => {

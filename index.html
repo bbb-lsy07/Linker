@@ -38,7 +38,6 @@
             background-color: #e8e8e8; 
             border-color: var(--text-color); 
         }
-        .language-flag { font-size: 14px; }
         .language-arrow { font-size: 10px; transition: transform 0.2s ease; }
         .language-toggle.open .language-arrow { transform: rotate(180deg); }
         .language-dropdown { 
@@ -181,17 +180,14 @@
                 </div>
                 <div class="language-selector">
                     <button class="language-toggle" id="language-toggle">
-                        <span class="language-flag">🌐</span>
                         <span class="language-text">中文</span>
                         <span class="language-arrow">▼</span>
                     </button>
                     <div class="language-dropdown" id="language-dropdown">
                         <a href="#" data-lang-code="zh" class="language-option">
-                            <span class="language-flag">🇨🇳</span>
                             <span>简体中文</span>
                         </a>
                         <a href="#" data-lang-code="en" class="language-option">
-                            <span class="language-flag">🇺🇸</span>
                             <span>English</span>
                         </a>
                     </div>
@@ -1239,14 +1235,11 @@
 
         function updateLanguageToggle(lang) {
             const languageText = languageToggle.querySelector('.language-text');
-            const languageFlag = languageToggle.querySelector('.language-flag');
             
             if (lang === 'zh') {
                 languageText.textContent = '中文';
-                languageFlag.textContent = '🇨🇳';
             } else {
                 languageText.textContent = 'English';
-                languageFlag.textContent = '🇺🇸';
             }
             
             // Update active state in dropdown

@@ -114,6 +114,12 @@
             </nav>
         </header>
 
+        <div class="controls">
+            <button data-view="map" class="active" data-lang="btn_map">全球地图</button>
+            <button data-view="standalones" data-lang="btn_standalones">独立服务器视图</button>
+            <button data-view="outages" data-lang="btn_outages">最近的掉线记录</button>
+        </div>
+
         <main id="main-content">
             <div id="map-view" class="view active">
                 <div id="world-map-container">
@@ -1077,12 +1083,6 @@
                  <div class="timeline"></div>
             </div>
         </main>
-
-        <div class="controls">
-            <button data-view="map" class="active" data-lang="btn_map">全球地图</button>
-            <button data-view="standalones" data-lang="btn_standalones">独立服务器视图</button>
-            <button data-view="outages" data-lang="btn_outages">最近的掉线记录</button>
-        </div>
 
         <footer>
             <span id="copyright-footer">Copyright 2025 Linker. Powered by Linker.</span> <span data-lang="footer_suffix">每10秒更新.</span>

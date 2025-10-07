@@ -49,7 +49,7 @@
             border-radius: 4px; 
             box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
             z-index: 1000; 
-            min-width: 120px; 
+            min-width: 80px; 
             opacity: 0; 
             visibility: hidden; 
             transform: translateY(-10px); 
@@ -61,15 +61,14 @@
             transform: translateY(0); 
         }
         .language-option { 
-            display: flex; 
-            align-items: center; 
-            gap: 8px; 
-            padding: 8px 12px; 
+            display: block; 
+            padding: 6px 10px; 
             color: var(--text-color); 
             text-decoration: none; 
             font-size: 12px; 
             transition: background-color 0.2s; 
             border-bottom: 1px solid var(--border-color); 
+            white-space: nowrap; 
         }
         .language-option:last-child { border-bottom: none; }
         .language-option:hover { background-color: var(--button-bg); }
@@ -1251,8 +1250,16 @@
         // Language dropdown toggle
         languageToggle.addEventListener('click', (e) => {
             e.stopPropagation();
-            languageToggle.classList.toggle('open');
-            languageDropdown.classList.toggle('show');
+            e.preventDefault();
+            
+            const isOpen = languageToggle.classList.contains('open');
+            if (isOpen) {
+                languageToggle.classList.remove('open');
+                languageDropdown.classList.remove('show');
+            } else {
+                languageToggle.classList.add('open');
+                languageDropdown.classList.add('show');
+            }
         });
 
         // Close dropdown when clicking outside
@@ -1265,9 +1272,14 @@
 
         // Language selection
         languageDropdown.addEventListener('click', (e) => {
-            if (e.target.tagName !== 'A') return;
             e.preventDefault();
-            const langCode = e.target.getAttribute('data-lang-code');
+            e.stopPropagation();
+            
+            // Find the closest language option
+            const languageOption = e.target.closest('.language-option');
+            if (!languageOption) return;
+            
+            const langCode = languageOption.getAttribute('data-lang-code');
             if (langCode && langCode !== currentLang) {
                 setLanguage(langCode);
                 localStorage.setItem('linkerLang', langCode);

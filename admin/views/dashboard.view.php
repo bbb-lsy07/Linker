@@ -34,6 +34,13 @@
         details { border: 1px solid #dee2e6; padding: 1.5rem; border-radius: 5px; margin-bottom: 1rem; background: #fdfdfd; }
         summary { font-weight: 600; cursor: pointer; font-size: 1.1em; }
         .actions-cell { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: #fff; padding: 2rem; border-radius: 8px; max-width: 90%; max-height: 90%; overflow-y: auto; position: relative; }
+        .modal-close { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666; }
+        .modal-close:hover { color: #000; }
+        .modal-code-block { background-color: #2d2d2d; color: #f1f1f1; padding: 1rem; border-radius: 5px; margin-top: 0.5rem; white-space: pre-wrap; word-wrap: break-word; position: relative; font-family: monospace; }
+        .modal-code-block .copy-btn { position: absolute; top: 10px; right: 10px; background: #555; color: #fff; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+        .modal-code-block .copy-btn:hover { background: #777; }
     </style>
 </head>
 <body>
@@ -106,6 +113,7 @@
                             </td>
                             <td class="actions-cell">
                                 <button class="edit-btn" data-id="<?php echo htmlspecialchars($server['id']); ?>">修改</button>
+                                <button class="setup-btn secondary" data-id="<?php echo htmlspecialchars($server['id']); ?>">一键部署</button>
                                 <form name="generate_secret_form" action="dashboard.php" method="post" onsubmit="return confirm('确定为 \'<?php echo htmlspecialchars($server['id']); ?>\' 生成一个新的密钥吗？旧密钥将立即失效！');" style="margin:0;">
                                      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token ?? ''); ?>">
                                      <input type="hidden" name="generate_secret_id" value="<?php echo htmlspecialchars($server['id']); ?>">
@@ -125,6 +133,29 @@
         </div>
     </div>
     
+    <!-- 一键部署命令弹窗 -->
+    <div id="command-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <button class="modal-close" onclick="document.getElementById('command-modal').style.display='none'">&times;</button>
+            <h2>一键部署命令</h2>
+            <p>请复制以下命令之一，在您需要被监控的服务器上以 root 用户身份执行。</p>
+            
+            <h3 style="margin-top: 1.5rem;">推荐 (使用 Systemd)</h3>
+            <p>此方法会将探针安装为系统服务，更稳定且支持开机自启。</p>
+            <div class="modal-code-block">
+                <button class="copy-btn" data-target="command-systemd">复制</button>
+                <pre id="command-systemd"></pre>
+            </div>
+
+            <h3 style="margin-top: 1.5rem;">备用 (使用 Nohup)</h3>
+            <p>此方法使用 `nohup` 在后台运行探针，简单快捷，但重启后需手动执行。</p>
+            <div class="modal-code-block">
+                <button class="copy-btn" data-target="command-nohup">复制</button>
+                <pre id="command-nohup"></pre>
+            </div>
+        </div>
+    </div>
+    
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const addEditDetails = document.getElementById('add-edit-details');
@@ -134,6 +165,11 @@
         const isEditingInput = addEditForm.querySelector('input[name="is_editing"]');
         const cancelBtn = document.getElementById('cancel-edit-btn');
         const serversData = <?php echo json_encode($servers); ?>;
+
+        // 获取弹窗元素
+        const commandModal = document.getElementById('command-modal');
+        const commandSystemdPre = document.getElementById('command-systemd');
+        const commandNohupPre = document.getElementById('command-nohup');
 
         // 显示消息的通用函数
         function showMessage(message, isError = false) {
@@ -259,6 +295,55 @@
                 }
             } catch (error) {
                 showMessage('请求失败，请重试', true);
+            }
+        });
+
+        // 处理"一键部署"按钮点击
+        document.querySelectorAll('.setup-btn').forEach(button => {
+            button.addEventListener('click', async function() {
+                const serverId = this.dataset.id;
+                const formData = new FormData();
+                formData.append('id', serverId);
+                formData.append('csrf_token', '<?php echo $csrf_token; ?>');
+                
+                try {
+                    const response = await fetch('api/admin.php?action=get_setup_command', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        commandSystemdPre.textContent = result.command_systemd;
+                        commandNohupPre.textContent = result.command_nohup;
+                        commandModal.style.display = 'flex';
+                    } else {
+                        showMessage(result.message || '生成命令失败', true);
+                    }
+                } catch (error) {
+                    showMessage('请求失败，请检查网络或刷新页面', true);
+                }
+            });
+        });
+
+        // 处理弹窗内的复制按钮
+        commandModal.querySelectorAll('.copy-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const targetId = this.dataset.target;
+                const textToCopy = document.getElementById(targetId).textContent;
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    this.textContent = '已复制!';
+                    setTimeout(() => { this.textContent = '复制'; }, 2000);
+                }).catch(err => {
+                    alert('复制失败: ' + err);
+                });
+            });
+        });
+        
+        // 点击弹窗外部区域关闭
+        commandModal.addEventListener('click', function(e) {
+            if (e.target === commandModal) {
+                commandModal.style.display = 'none';
             }
         });
 

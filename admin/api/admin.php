@@ -54,6 +54,86 @@ try {
             ]);
             break;
             
+        case 'get_setup_command':
+            if (!isset($_POST['id'])) {
+                throw new Exception('缺少服务器ID');
+            }
+            $server_id = $_POST['id'];
+
+            $stmt = $pdo->prepare("SELECT secret FROM servers WHERE id = ?");
+            $stmt->execute([$server_id]);
+            $server = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$server) {
+                throw new Exception('未找到指定的服务器。');
+            }
+            $secret = $server['secret'];
+
+            // 动态生成 API 端点 URL
+            $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+            $host = $_SERVER['HTTP_HOST'];
+            $api_endpoint = "{$scheme}://{$host}/report.php";
+            $script_url = "{$scheme}://{$host}/update.sh";
+
+            // 生成推荐的 Systemd 命令
+            // 使用 HEREDOC 语法使多行命令更清晰
+            $command_systemd = <<<SHELL
+sudo bash -c "
+# Download the agent script
+curl -sSL {$script_url} -o /usr/local/bin/linker-agent.sh
+chmod +x /usr/local/bin/linker-agent.sh
+
+# Configure the agent
+sed -i 's|API_ENDPOINT=\".*\"|API_ENDPOINT=\"{$api_endpoint}\"|' /usr/local/bin/linker-agent.sh
+sed -i 's|SERVER_ID=\".*\"|SERVER_ID=\"{$server_id}\"|' /usr/local/bin/linker-agent.sh
+sed -i 's|SECRET=\".*\"|SECRET=\"{$secret}\"|' /usr/local/bin/linker-agent.sh
+
+# Create systemd service file
+cat > /etc/systemd/system/linker-agent.service <<EOF
+[Unit]
+Description=Linker Monitor Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linker-agent.sh
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Start and enable the service
+systemctl daemon-reload
+systemctl enable linker-agent.service
+systemctl restart linker-agent.service
+
+echo '✅ Linker Agent 已通过 Systemd 成功部署并启动！'
+"
+SHELL;
+
+            // 生成简单的 Nohup 命令 (作为备选)
+            $command_nohup = <<<SHELL
+# Download, configure, and run in background
+curl -sSL {$script_url} | \\
+sed 's|API_ENDPOINT=\".*\"|API_ENDPOINT=\"{$api_endpoint}\"|' | \\
+sed 's|SERVER_ID=\".*\"|SERVER_ID=\"{$server_id}\"|' | \\
+sed 's|SECRET=\".*\"|SECRET=\"{$secret}\"|' > linker-agent.sh && \\
+chmod +x linker-agent.sh && \\
+nohup ./linker-agent.sh &
+
+echo '✅ Linker Agent 已通过 Nohup 在后台启动！'
+SHELL;
+
+
+            echo json_encode([
+                'success' => true,
+                'command_systemd' => $command_systemd,
+                'command_nohup' => $command_nohup
+            ]);
+            break;
+
         case 'generate_secret':
             if (!isset($_POST['generate_secret_id'])) {
                 throw new Exception('缺少服务器ID');

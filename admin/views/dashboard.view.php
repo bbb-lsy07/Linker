@@ -34,8 +34,6 @@
         details { border: 1px solid #dee2e6; padding: 1.5rem; border-radius: 5px; margin-bottom: 1rem; background: #fdfdfd; }
         summary { font-weight: 600; cursor: pointer; font-size: 1.1em; }
         .actions-cell { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-        .secret-wrapper { display: flex; align-items: center; gap: 0.5rem; }
-        .secret-wrapper input { flex-grow: 1; }
     </style>
 </head>
 <body>
@@ -104,10 +102,7 @@
                             <td><?php echo htmlspecialchars($server['name']); ?></td>
                             <td><?php echo htmlspecialchars($server['tags'] ?? ''); ?></td>
                             <td>
-                                <div class="secret-wrapper">
-                                    <input type="text" id="secret-<?php echo htmlspecialchars($server['id']); ?>" value="<?php echo htmlspecialchars($server['secret'] ?? ''); ?>" readonly>
-                                    <button class="secondary copy-btn" data-clipboard-target="#secret-<?php echo htmlspecialchars($server['id']); ?>">复制</button>
-                                </div>
+                                <input type="text" id="secret-<?php echo htmlspecialchars($server['id']); ?>" value="<?php echo htmlspecialchars($server['secret'] ?? ''); ?>" readonly style="width: 100%;">
                             </td>
                             <td class="actions-cell">
                                 <button class="edit-btn" data-id="<?php echo htmlspecialchars($server['id']); ?>">修改</button>
@@ -306,22 +301,6 @@
             }
         });
 
-        document.querySelectorAll('.copy-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const targetInput = document.querySelector(this.dataset.clipboardTarget);
-                if (targetInput && targetInput.value) {
-                    // 使用新的 Clipboard API
-                    navigator.clipboard.writeText(targetInput.value).then(() => {
-                        const originalText = this.textContent;
-                        this.textContent = '已复制!';
-                        setTimeout(() => { this.textContent = originalText; }, 2000);
-                    }).catch(err => {
-                        console.error('复制失败: ', err);
-                        alert('复制失败，您的浏览器可能不支持或权限不足。');
-                    });
-                }
-            });
-        });
     });
     </script>
 </body>

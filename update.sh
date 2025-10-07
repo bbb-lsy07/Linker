@@ -16,6 +16,10 @@ SECRET="your-secret-key"
 # 错误报告日志文件
 LOG_FILE="/var/log/linker_monitor_client.log"
 
+# [优化] 将标志文件路径改为脚本所在目录，使其持久化
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+FIRST_RUN_FLAG="$SCRIPT_DIR/.linker_first_run_completed"
+
 echo "Starting Linker monitoring script for $SERVER_ID..."
 echo "Reporting to $API_ENDPOINT. Errors will be logged to $LOG_FILE"
 
@@ -51,18 +55,19 @@ get_network_usage() {
     echo "\"net_up_speed\": ${TX_SPEED:-0}, \"net_down_speed\": ${RX_SPEED:-0}, \"total_up\": ${TOTAL_UP:-0}, \"total_down\": ${TOTAL_DOWN:-0}"
 }
 
-# --- 首次运行时获取静态信息 ---
-# 使用一个标志文件来判断是否是首次运行
-FIRST_RUN_FLAG="/tmp/linker_first_run_$$"
-if [ ! -f "$FIRST_RUN_FLAG" ]; then
-    CPU_MODEL=$(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d ':' -f 2 | sed 's/^[ \t]*//')
-    CPU_CORES=$(nproc)
-    MEM_TOTAL_BYTES=$(free -b | awk 'NR==2{print $2}')
-    DISK_TOTAL_BYTES=$(df -B1 / | awk 'NR==2{print $2}')
-    OS_INFO=$( (lsb_release -ds 2>/dev/null || cat /etc/*-release 2>/dev/null | head -n1 || uname -om) | tr -d '"' )
-    ARCH=$(uname -m)
+# 主循环
+while true; do
+    # [优化] 将静态信息检查逻辑移入主循环
+    STATIC_INFO_JSON=""
+    if [ ! -f "$FIRST_RUN_FLAG" ]; then
+        CPU_MODEL=$(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d ':' -f 2 | sed 's/^[ \t]*//')
+        CPU_CORES=$(nproc)
+        MEM_TOTAL_BYTES=$(free -b | awk 'NR==2{print $2}')
+        DISK_TOTAL_BYTES=$(df -B1 / | awk 'NR==2{print $2}')
+        OS_INFO=$( (lsb_release -ds 2>/dev/null || cat /etc/*-release 2>/dev/null | head -n1 || uname -om) | tr -d '"' )
+        ARCH=$(uname -m)
 
-    STATIC_INFO_JSON=$(cat <<EOF
+        STATIC_INFO_JSON=$(cat <<EOF
 ,
 "static_info": {
     "cpu_model": "$CPU_MODEL",
@@ -74,16 +79,7 @@ if [ ! -f "$FIRST_RUN_FLAG" ]; then
 }
 EOF
 )
-    touch "$FIRST_RUN_FLAG"
-    # 添加一个at job，在脚本退出后一段时间删除标志文件，以备重启
-    echo "rm -f $FIRST_RUN_FLAG" | at now + 5 minutes > /dev/null 2>&1
-else
-    STATIC_INFO_JSON=""
-fi
-# --- 静态信息获取结束 ---
-
-# 主循环
-while true; do
+    fi
     CPU_USAGE=$(awk '{u=$2+$4; t=$2+$4+$5; if (NR==1){u1=u; t1=t;} else print ($2+$4-u1) * 100 / (t-t1); }' <(grep 'cpu ' /proc/stat) <(sleep 1;grep 'cpu ' /proc/stat) | awk '{printf "%.2f", $0}')
     MEM_INFO=$(free | awk 'NR==2{printf "\"mem_usage_percent\": %.2f", $3/$2*100}')
     DISK_USAGE=$(df / | awk 'NR==2{print $5}' | sed 's/%//')
@@ -113,16 +109,19 @@ while true; do
 }
 EOF
 )
-    
-    # 首次报告后，不再发送静态信息以节省带宽
-    STATIC_INFO_JSON=""
 
     HTTP_RESPONSE=$(curl --write-out "HTTPSTATUS:%{http_code}" -s -X POST -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "$API_ENDPOINT")
     
     HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
     HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed -e 's/HTTPSTATUS\:.*//g')
     
-    if [ "$HTTP_STATUS" -ne 200 ]; then
+    if [ "$HTTP_STATUS" -eq 200 ]; then
+        # [优化] 如果请求成功，并且本次上报了静态信息，则创建标志文件
+        if [ -n "$STATIC_INFO_JSON" ]; then
+            echo "[$(date)] - Static info reported successfully. Creating flag file." >> "$LOG_FILE"
+            touch "$FIRST_RUN_FLAG"
+        fi
+    else
         ERROR_MSG="[$(date)] - Failed to report data. Status: $HTTP_STATUS, Response: $HTTP_BODY"
         echo "$ERROR_MSG" >&2
         echo "$ERROR_MSG" >> "$LOG_FILE"

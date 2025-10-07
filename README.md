@@ -41,16 +41,26 @@
     server {
         listen 80;
         server_name your-domain.com;
-        root /var/www/linker; # 指向您的项目目录
+        
+        # 网站根目录必须指向 public 文件夹
+        root /var/www/linker/public; 
         index index.html index.php;
 
         location / {
-            try_files $uri $uri/ /index.php?$query_string;
+            # 移除 try_files 中的 $uri/，因为所有请求都应通过 index.php 处理
+            try_files $uri /index.php?$query_string;
         }
 
         location ~ \.php$ {
+            # 确保 fastcgi_param SCRIPT_FILENAME 指向正确的文件路径
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             include snippets/fastcgi-php.conf;
             fastcgi_pass unix:/var/run/php/php7.4-fpm.sock; # 您的 PHP-FPM 地址
+        }
+
+        # 阻止访问 public 目录之外的任何 .php 文件（增加安全性）
+        location ~ /../.*\.php$ {
+            return 404;
         }
     }
     ```

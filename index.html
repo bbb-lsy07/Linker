@@ -1089,7 +1089,7 @@
         </main>
 
         <footer>
-            <span id="copyright-footer">Copyright 2025 Linker. Powered by <a href="https://github.com/bbb-lsy07/Linker" target="_blank" style="color: #007bff; text-decoration: none;">Linker</a>.</span> <span>每10秒更新.</span>
+            <span id="copyright-footer">Copyright 2025 Linker. Powered by <a href="https://github.com/bbb-lsy07/Linker" target="_blank" style="color: #999; text-decoration: none;">Linker</a>.</span>
         </footer>
     </div>
     
@@ -1141,7 +1141,7 @@
                 monitorData = data;
                 document.title = monitorData.site_name;
                 document.getElementById('site-title').textContent = monitorData.site_name;
-                document.getElementById('copyright-footer').innerHTML = `Copyright 2025 ${monitorData.site_name}. Powered by <a href="https://github.com/bbb-lsy07/Linker" target="_blank" style="color: #007bff; text-decoration: none;">Linker</a>.`;
+                document.getElementById('copyright-footer').innerHTML = `Copyright 2025 ${monitorData.site_name}. Powered by <a href="https://github.com/bbb-lsy07/Linker" target="_blank" style="color: #999; text-decoration: none;">Linker</a>.`;
                 renderAllViews();
             } catch (error) {
                 console.error("获取监控数据失败:", error);

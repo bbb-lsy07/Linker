@@ -4,6 +4,9 @@
  * 统一加载所有通用文件和配置
  */
 
+// 【新增】定义一个安全常量，表示应用已通过合法入口加载
+define('LINKER_SECURE_INCLUDE', true);
+
 // 加载配置文件
 require_once __DIR__ . '/../config.php';
 

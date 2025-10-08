@@ -1,6 +1,13 @@
 <?php
 // db_update.php - Upgrades the database schema for Linker Monitor
 header('Content-Type: text/plain; charset=utf-8');
+
+// 【新增】入口守卫 - 只允许通过命令行访问
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    die('Direct access not permitted. This script should only be run from command line.');
+}
+
 require_once __DIR__ . '/config.php';
 
 echo "灵刻监控 数据库升级脚本\n";

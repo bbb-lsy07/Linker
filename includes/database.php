@@ -1,4 +1,10 @@
 <?php
+// 【新增】入口守卫
+if (!defined('LINKER_SECURE_INCLUDE')) {
+    http_response_code(403);
+    die('Direct access not permitted.');
+}
+
 /**
  * 数据库连接函数
  * 提供统一的数据库连接管理

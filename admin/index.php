@@ -27,6 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password'])) {
+            // 重新生成会话ID以防止会话固定攻击
+            session_regenerate_id(true);
+            
             $_SESSION['loggedin'] = true;
             $_SESSION['username'] = $username;
             header('Location: dashboard.php');

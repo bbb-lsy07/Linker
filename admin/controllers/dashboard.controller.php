@@ -1,4 +1,10 @@
 <?php
+// 【新增】入口守卫
+if (!defined('LINKER_SECURE_INCLUDE')) {
+    http_response_code(403);
+    die('Direct access not permitted.');
+}
+
 /**
  * Dashboard 控制器
  * 仅负责获取数据以供视图展示

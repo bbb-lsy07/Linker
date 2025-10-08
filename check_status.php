@@ -2,6 +2,12 @@
 // check_status.php - Cron job script to check for offline servers and send alerts. v2.1 (Optimized)
 date_default_timezone_set('UTC'); 
 
+// 【新增】入口守卫 - 只允许通过命令行或cron访问
+if (php_sapi_name() !== 'cli' && !defined('LINKER_SECURE_INCLUDE')) {
+    http_response_code(403);
+    die('Direct access not permitted.');
+}
+
 require_once __DIR__ . '/includes/bootstrap.php';
 
 function send_telegram_message($token, $chat_id, $message) {

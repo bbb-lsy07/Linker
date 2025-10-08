@@ -2,7 +2,7 @@
 
 [![PHP Version](https://img.shields.io/badge/php-%3E=7.4-8892BF.svg)](https://www.php.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/your-repo/linker)
+[![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/bbb-lsy07/linker)
 
 **灵刻 (Linker)** 是一个现代化、轻量级、自托管的服务器状态监控面板。它通过一个优雅且信息丰富的界面，帮助您实时了解所有服务器的关键性能指标。
 

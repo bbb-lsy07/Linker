@@ -3,14 +3,21 @@
 # ==============================================================================
 # Linker (灵刻) Monitor Client Script v2.0
 # ==============================================================================
-# 请在这里配置您的信息
-# ------------------------------------------------------------------------------
-# API端点，用于接收状态报告
-API_ENDPOINT="https://your-domain.com/report.php"
-# 服务器的唯一ID (与管理员后台设置的ID匹配)
-SERVER_ID="your-server-id"
-# 每个服务器独立的密钥 (从管理员后台复制)
-SECRET="your-secret-key"
+# 从配置文件读取配置，如果文件不存在则使用脚本内默认值
+# 优先使用系统级配置文件，然后是当前目录的配置文件
+CONFIG_FILE="/etc/linker-agent.conf"
+LOCAL_CONFIG_FILE="linker-agent.conf"
+
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+elif [ -f "$LOCAL_CONFIG_FILE" ]; then
+    source "$LOCAL_CONFIG_FILE"
+else
+    # 默认配置（用于测试或手动配置）
+    API_ENDPOINT="https://your-domain.com/report.php"
+    SERVER_ID="your-server-id"
+    SECRET="your-secret-key"
+fi
 # ==============================================================================
 
 # 错误报告日志文件

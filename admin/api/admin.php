@@ -83,10 +83,12 @@ sudo bash -c "
 curl -sSL {$script_url} -o /usr/local/bin/linker-agent.sh
 chmod +x /usr/local/bin/linker-agent.sh
 
-# Configure the agent
-sed -i 's|API_ENDPOINT=\".*\"|API_ENDPOINT=\"{$api_endpoint}\"|' /usr/local/bin/linker-agent.sh
-sed -i 's|SERVER_ID=\".*\"|SERVER_ID=\"{$server_id}\"|' /usr/local/bin/linker-agent.sh
-sed -i 's|SECRET=\".*\"|SECRET=\"{$secret}\"|' /usr/local/bin/linker-agent.sh
+# Create and configure the agent's config file
+cat > /etc/linker-agent.conf <<EOF
+API_ENDPOINT=\"{$api_endpoint}\"
+SERVER_ID=\"{$server_id}\"
+SECRET=\"{$secret}\"
+EOF
 
 # Create systemd service file
 cat > /etc/systemd/system/linker-agent.service <<EOF
@@ -115,12 +117,18 @@ SHELL;
 
             // 生成简单的 Nohup 命令 (作为备选)
             $command_nohup = <<<SHELL
-# Download, configure, and run in background
-curl -sSL {$script_url} | \\
-sed 's|API_ENDPOINT=\".*\"|API_ENDPOINT=\"{$api_endpoint}\"|' | \\
-sed 's|SERVER_ID=\".*\"|SERVER_ID=\"{$server_id}\"|' | \\
-sed 's|SECRET=\".*\"|SECRET=\"{$secret}\"|' > linker-agent.sh && \\
-chmod +x linker-agent.sh && \\
+# Download agent script
+curl -sSL {$script_url} -o linker-agent.sh
+chmod +x linker-agent.sh
+
+# Create config file in the current directory
+cat > linker-agent.conf <<EOF
+API_ENDPOINT=\"{$api_endpoint}\"
+SERVER_ID=\"{$server_id}\"
+SECRET=\"{$secret}\"
+EOF
+
+# Run in background (the script will find the config file)
 nohup ./linker-agent.sh &
 
 echo '✅ Linker Agent 已通过 Nohup 在后台启动！'

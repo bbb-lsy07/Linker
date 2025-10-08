@@ -175,17 +175,24 @@ SHELL;
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$_POST['name'], $ip, $_POST['latitude'], $_POST['longitude'], $_POST['intro'], $tags, $country_code, $id]);
                 $message = "服务器 '" . htmlspecialchars($_POST['name']) . "' 已成功更新！";
+                $server_data = null; // 编辑模式不需要返回数据
             } else {
                 $secret = generate_secret_key();
                 $sql = "INSERT INTO servers (id, name, ip, latitude, longitude, intro, tags, country_code, secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([$id, $_POST['name'], $ip, $_POST['latitude'], $_POST['longitude'], $_POST['intro'], $tags, $country_code, $secret]);
                 $message = "服务器 '" . htmlspecialchars($_POST['name']) . "' 已成功添加！";
+                
+                // 查询刚刚插入的服务器数据并返回
+                $stmt_new = $pdo->prepare("SELECT * FROM servers WHERE id = ?");
+                $stmt_new->execute([$id]);
+                $server_data = $stmt_new->fetch(PDO::FETCH_ASSOC);
             }
             
             echo json_encode([
                 'success' => true, 
-                'message' => $message
+                'message' => $message,
+                'server_data' => $server_data
             ]);
             break;
             

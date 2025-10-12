@@ -25,6 +25,42 @@
             </div>
         </header>
 
+        <section class="summary-bar" id="summary-bar">
+            <div class="summary-item">
+                <span class="label">服务器总数</span>
+                <span class="value" id="summary-total">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">在线</span>
+                <span class="value" id="summary-online">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">离线</span>
+                <span class="value" id="summary-offline">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">数据陈旧</span>
+                <span class="value" id="summary-stale">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">平均资源占用</span>
+                <span class="value" id="summary-avg-cpu">--%</span>
+                <span class="subvalue">内存 <span id="summary-avg-mem">--%</span></span>
+            </div>
+            <div class="summary-item">
+                <span class="label">平均负载</span>
+                <span class="value" id="summary-avg-load">--</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">活跃告警</span>
+                <span class="value" id="summary-active-alerts">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="label">最近同步</span>
+                <span class="value" id="summary-last-sync">--</span>
+            </div>
+        </section>
+
         <main id="main-content">
             <div id="map-view" class="view active">
                 <div id="world-map-container">
@@ -980,7 +1016,28 @@
                 </div>
             </div>
             <div id="standalones-view" class="view">
+                <div class="list-toolbar">
+                    <div class="search-field">
+                        <input type="search" id="server-search" placeholder="搜索服务器、标签或描述..." autocomplete="off" />
+                    </div>
+                    <div class="status-filters" role="group" aria-label="状态筛选">
+                        <button data-status="all" class="active">全部</button>
+                        <button data-status="online">在线</button>
+                        <button data-status="offline">离线</button>
+                        <button data-status="stale">陈旧</button>
+                    </div>
+                    <div class="last-refresh">数据更新：<span id="last-data-refresh">--</span></div>
+                </div>
                 <div class="tag-filters"></div>
+                <details class="insights-drawer" id="insights-drawer">
+                    <summary>
+                        <span>智能洞察</span>
+                        <span class="insights-updated" id="insights-generated-at">--</span>
+                    </summary>
+                    <div class="insights-grid" id="insights-grid">
+                        <div class="insight-empty">正在加载洞察...</div>
+                    </div>
+                </details>
                 <div class="card-grid"></div>
                 <div class="pagination"></div>
             </div>

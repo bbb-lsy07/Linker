@@ -1,10 +1,12 @@
     document.addEventListener('DOMContentLoaded', () => {
-        let monitorData = { nodes: [], outages: [], site_name: '灵刻监控' };
+        let monitorData = { nodes: [], outages: [], site_name: '灵刻监控', summary: {} };
         let activeButton = document.querySelector('.controls button[data-view="map"]');
         let signalInterval = null;
         let activeTags = new Set();
         let currentPage = 1;
         const itemsPerPage = 18;
+        let searchQuery = '';
+        let statusFilter = 'all';
 
 
         const tooltip = document.getElementById('tooltip');
@@ -13,6 +15,37 @@
         const views = document.querySelectorAll('.view');
         const modalOverlay = document.getElementById('details-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
+        const lastDataRefresh = document.getElementById('last-data-refresh');
+        const searchInput = document.getElementById('server-search');
+        const statusFilterButtons = document.querySelectorAll('.status-filters button');
+        const summaryElements = {
+            total: document.getElementById('summary-total'),
+            online: document.getElementById('summary-online'),
+            offline: document.getElementById('summary-offline'),
+            stale: document.getElementById('summary-stale'),
+            avgCpu: document.getElementById('summary-avg-cpu'),
+            avgMem: document.getElementById('summary-avg-mem'),
+            avgLoad: document.getElementById('summary-avg-load'),
+            activeAlerts: document.getElementById('summary-active-alerts'),
+            lastSync: document.getElementById('summary-last-sync')
+        };
+
+        if (searchInput) {
+            searchInput.addEventListener('input', (event) => {
+                searchQuery = event.target.value.trim().toLowerCase();
+                currentPage = 1;
+                generateStandalonesView(monitorData.nodes);
+            });
+        }
+
+        statusFilterButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                statusFilter = button.dataset.status || 'all';
+                statusFilterButtons.forEach(btn => btn.classList.toggle('active', btn === button));
+                currentPage = 1;
+                generateStandalonesView(monitorData.nodes);
+            });
+        });
 
 
         function displayError(message) {
@@ -35,6 +68,7 @@
                 if (data.error) throw new Error(`API 错误: ${data.error}`);
                 
                 monitorData = data;
+                monitorData.summary = monitorData.summary || {};
                 document.title = monitorData.site_name;
                 document.getElementById('site-title').textContent = monitorData.site_name;
                 document.getElementById('copyright-footer').innerHTML = `Copyright 2025 ${monitorData.site_name}. Powered by <a href="https://github.com/bbb-lsy07/Linker" target="_blank" style="color: #999; text-decoration: none;">Linker</a>.`;
@@ -59,7 +93,83 @@
             return `${(seconds / 86400).toFixed(1)} 天`;
         }
 
+        function formatDateTime(timestamp) {
+            if (!timestamp) return '';
+            const value = Number(timestamp);
+            const ms = value < 1e12 ? value * 1000 : value;
+            return new Date(ms).toLocaleString(navigator.language.startsWith('zh') ? 'zh-CN' : undefined);
+        }
+
+        function formatRelativeTime(timestamp) {
+            if (!timestamp) return '无记录';
+            const value = Number(timestamp);
+            const ms = value < 1e12 ? value * 1000 : value;
+            const diffSeconds = Math.round((Date.now() - ms) / 1000);
+            if (diffSeconds <= 0) return '刚刚';
+            if (diffSeconds < 60) return `${diffSeconds} 秒前`;
+            if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} 分钟前`;
+            if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} 小时前`;
+            if (diffSeconds < 86400 * 7) return `${Math.floor(diffSeconds / 86400)} 天前`;
+            return new Date(ms).toLocaleDateString(navigator.language.startsWith('zh') ? 'zh-CN' : undefined);
+        }
+
+        function formatPercent(value, fraction = 1) {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return '--%';
+            }
+            return `${Number(value).toFixed(fraction)}%`;
+        }
+
+        function formatNumber(value, fraction = 2, fallback = '--') {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return fallback;
+            }
+            return Number(value).toFixed(fraction);
+        }
+
+        function updateLastRefreshDisplay(timestamp) {
+            if (!lastDataRefresh) return;
+            if (!timestamp) {
+                lastDataRefresh.textContent = '--';
+                lastDataRefresh.removeAttribute('title');
+                return;
+            }
+            const relative = formatRelativeTime(timestamp);
+            const absolute = formatDateTime(timestamp);
+            lastDataRefresh.textContent = `${relative} · ${absolute}`;
+            lastDataRefresh.title = absolute;
+        }
+
+        function updateSummaryBar(summary = {}) {
+            if (!summaryElements.total) return;
+            const safe = {
+                total_servers: summary.total_servers ?? monitorData.nodes.length,
+                online: summary.online ?? 0,
+                offline: summary.offline ?? Math.max(0, monitorData.nodes.length - (summary.online ?? 0)),
+                stale: summary.stale ?? 0,
+                avg_cpu: summary.avg_cpu ?? null,
+                avg_mem: summary.avg_mem ?? null,
+                avg_load: summary.avg_load ?? null,
+                active_alerts: summary.active_alerts ?? 0,
+                last_sync: summary.last_sync ?? null,
+                generated_at: summary.generated_at ?? null
+            };
+            summaryElements.total.textContent = safe.total_servers;
+            summaryElements.online.textContent = safe.online;
+            summaryElements.offline.textContent = safe.offline;
+            summaryElements.stale.textContent = safe.stale;
+            summaryElements.avgCpu.textContent = formatPercent(safe.avg_cpu);
+            summaryElements.avgMem.textContent = formatPercent(safe.avg_mem);
+            summaryElements.avgLoad.textContent = safe.avg_load !== null && safe.avg_load !== undefined ? Number(safe.avg_load).toFixed(2) : '--';
+            summaryElements.activeAlerts.textContent = safe.active_alerts;
+            summaryElements.lastSync.textContent = safe.last_sync ? formatRelativeTime(safe.last_sync) : '--';
+            summaryElements.lastSync.title = safe.last_sync ? formatDateTime(safe.last_sync) : '';
+            updateLastRefreshDisplay(safe.last_sync || safe.generated_at);
+            monitorData.summary = summary;
+        }
+
         function renderAllViews() {
+            updateSummaryBar(monitorData.summary || {});
             initializeMap(monitorData.nodes);
             generateStandalonesView(monitorData.nodes);
             generateOutagesView(monitorData.outages, monitorData.nodes);
@@ -95,27 +205,51 @@
                 if(width > 0 && height > 0) mapContainer.style.aspectRatio = `${width} / ${height}`;
             }
             nodes.forEach(node => {
-                if (node.hasOwnProperty('x') && node.hasOwnProperty('y')) {
-                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    circle.setAttribute('id', `map-node-${node.id}`);
-                    circle.setAttribute('class', `map-node ${!node.is_online ? 'anomaly' : ''}`);
-                    circle.setAttribute('cx', node.y); circle.setAttribute('cy', node.x); circle.setAttribute('r', 5);
-                    svg.appendChild(circle);
-                    circle.addEventListener('mouseenter', () => {
-                        let content = `<strong>${getFlagEmoji(node.country_code)} ${node.name}</strong>`;
-                        if (node.intro) content += `<br><span class="subtitle">${node.intro}</span>`;
-                        if (!node.is_online) content += `<br><span class="anomaly-subtitle">${node.anomaly_msg || '状态异常'}</span>`;
-                        tooltip.innerHTML = content;
-                        tooltip.style.display = 'block';
-                    });
-                    circle.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-                    circle.addEventListener('click', () => showDetailsModal(node.id));
+                const cy = Number(node?.x);
+                const cx = Number(node?.y);
+                if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+                    return;
                 }
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('id', `map-node-${node.id}`);
+                circle.classList.add('map-node');
+                if (!node.is_online) {
+                    circle.classList.add('anomaly');
+                } else if (node.is_stale) {
+                    circle.classList.add('stale');
+                }
+                circle.setAttribute('cx', cx);
+                circle.setAttribute('cy', cy);
+                circle.setAttribute('r', 5);
+                svg.appendChild(circle);
+                circle.addEventListener('mouseenter', () => {
+                    let content = `<strong>${getFlagEmoji(node.country_code)} ${node.name}</strong>`;
+                    if (node.intro) content += `<br><span class="subtitle">${node.intro}</span>`;
+                    const statusParts = [];
+                    if (!node.is_online) {
+                        statusParts.push(node.anomaly_msg || '服务器离线');
+                    } else if (node.is_stale) {
+                        statusParts.push('数据陈旧');
+                    } else {
+                        statusParts.push('在线');
+                    }
+                    if (node.last_reported) {
+                        statusParts.push(formatRelativeTime(node.last_reported));
+                    }
+                    if (statusParts.length) {
+                        const statusClass = !node.is_online ? 'anomaly-subtitle' : 'subtitle';
+                        content += `<br><span class="${statusClass}">状态: ${statusParts.join(' · ')}</span>`;
+                    }
+                    tooltip.innerHTML = content;
+                    tooltip.style.display = 'block';
+                });
+                circle.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+                circle.addEventListener('click', () => showDetailsModal(node.id));
             });
         }
         
         function formatBytes(bytes, decimals = 2) {
-            if (!bytes || bytes === 0) return '0 Bytes';
+            if (!bytes || bytes <= 0) return '0 Bytes';
             const k = 1024;
             const dm = decimals < 0 ? 0 : decimals;
             const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -126,52 +260,98 @@
         function generateStandalonesView(nodes) {
             const container = document.querySelector('#standalones-view .card-grid');
             container.innerHTML = '';
-            
+
             const filteredNodes = nodes.filter(node => {
                 const nodeTags = node.tags ? node.tags.split(',').map(t => t.trim()) : [];
-                return activeTags.size === 0 || [...activeTags].every(tag => nodeTags.includes(tag));
+                const matchesTags = activeTags.size === 0 || [...activeTags].every(tag => nodeTags.includes(tag));
+                const matchesStatus = statusFilter === 'all'
+                    ? true
+                    : (statusFilter === 'online' && node.is_online && !node.is_stale)
+                        || (statusFilter === 'offline' && !node.is_online)
+                        || (statusFilter === 'stale' && node.is_online && node.is_stale);
+                const matchesSearch = !searchQuery || [node.name, node.id, node.intro, node.tags, node.ip]
+                    .filter(Boolean)
+                    .some(value => value.toString().toLowerCase().includes(searchQuery));
+                return matchesTags && matchesStatus && matchesSearch;
             });
 
+            const totalPages = Math.max(1, Math.ceil(filteredNodes.length / itemsPerPage));
+            if (currentPage > totalPages) {
+                currentPage = totalPages;
+            }
             const paginatedNodes = filteredNodes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
             paginatedNodes.forEach(node => {
                 const stats = node.stats || {};
                 const isOffline = !node.is_online;
-                const isHighLoad = !isOffline && stats.load_avg > 2.0;
-                
+                const isStale = !!node.is_stale && node.is_online;
+                const loadAvg = Number(stats.load_avg ?? 0);
+                const isHighLoad = !isOffline && !isStale && Number.isFinite(loadAvg) && loadAvg > 2.0;
+
                 let cardClass = 'server-card';
-                if (isOffline) cardClass += ' offline';
-                if (isHighLoad) cardClass += ' high-load';
+                if (isOffline) {
+                    cardClass += ' offline';
+                } else if (isStale) {
+                    cardClass += ' stale';
+                } else if (isHighLoad) {
+                    cardClass += ' high-load';
+                }
 
                 const card = document.createElement('div');
                 card.className = cardClass;
                 card.dataset.serverId = node.id;
 
-                const cpu = parseFloat(stats.cpu_usage || 0);
-                const mem = parseFloat(stats.mem_usage_percent || 0);
-                const disk = parseFloat(stats.disk_usage_percent || 0);
-                const uptime = isOffline ? (formatDuration(node.outage_duration || 0)) : (stats.uptime || '...');
+                const clampPercent = (value) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+                const cpuRaw = Number(stats.cpu_usage ?? 0);
+                const memRaw = Number(stats.mem_usage_percent ?? 0);
+                const diskRaw = Number(stats.disk_usage_percent ?? 0);
+                const cpuPercent = clampPercent(cpuRaw);
+                const memPercent = clampPercent(memRaw);
+                const diskPercent = clampPercent(diskRaw);
+                const uptime = isOffline ? formatDuration(node.outage_duration || 0) : (stats.uptime || '—');
+                const loadDisplay = Number.isFinite(loadAvg) ? loadAvg.toFixed(2) : '--';
+                const lastSeen = node.last_reported ? formatRelativeTime(node.last_reported) : '无记录';
+                const statusIconClass = isOffline ? 'down' : (isStale ? 'stale' : '');
+                const statusNoteClass = isOffline ? 'danger' : ((isStale || isHighLoad) ? 'warning' : '');
+                let statusLabel = '状态: ';
+                if (isOffline) {
+                    statusLabel += '离线';
+                } else if (isStale) {
+                    statusLabel += '数据陈旧';
+                } else if (isHighLoad) {
+                    statusLabel += '负载偏高';
+                } else {
+                    statusLabel += '在线';
+                }
+                if (node.last_reported) {
+                    statusLabel += ` · ${lastSeen}`;
+                }
 
                 card.innerHTML = `
                     <div class="card-header">
-                        <div class="status-icon ${isOffline ? 'down' : ''}"></div>
-                        <div class="name">${getFlagEmoji(node.country_code)} ${node.name}</div>
+                        <div class="status-icon ${statusIconClass}"></div>
+                        <div class="header-title">
+                            <div class="name">${getFlagEmoji(node.country_code)} ${node.name}</div>
+                            <div class="status-note ${statusNoteClass}">${statusLabel}</div>
+                        </div>
                     </div>
                     <div class="stat-grid">
                         <div class="label">CPU</div>
-                        <div class="progress-bar"><div class="progress-bar-inner progress-cpu" style="width: ${cpu.toFixed(0)}%;">${cpu.toFixed(0)}%</div></div>
+                        <div class="progress-bar"><div class="progress-bar-inner progress-cpu" style="width: ${cpuPercent.toFixed(0)}%;">${cpuPercent.toFixed(0)}%</div></div>
                         <div class="label">内存</div>
-                        <div class="progress-bar"><div class="progress-bar-inner progress-mem" style="width: ${mem.toFixed(0)}%;">${mem.toFixed(0)}%</div></div>
+                        <div class="progress-bar"><div class="progress-bar-inner progress-mem" style="width: ${memPercent.toFixed(0)}%;">${memPercent.toFixed(0)}%</div></div>
                         <div class="label">硬盘</div>
-                        <div class="progress-bar"><div class="progress-bar-inner progress-disk" style="width: ${disk.toFixed(0)}%;">${disk.toFixed(0)}%</div></div>
+                        <div class="progress-bar"><div class="progress-bar-inner progress-disk" style="width: ${diskPercent.toFixed(0)}%;">${diskPercent.toFixed(0)}%</div></div>
                         <div class="label">网络</div>
                         <div class="value">↑ ${formatBytes(stats.net_up_speed || 0)}/s | ↓ ${formatBytes(stats.net_down_speed || 0)}/s</div>
                         <div class="label">流量</div>
                         <div class="value">↑ ${formatBytes(stats.total_up || 0)} | ↓ ${formatBytes(stats.total_down || 0)}</div>
                         <div class="label">负载</div>
-                        <div class="value">${parseFloat(stats.load_avg || 0).toFixed(2)}</div>
+                        <div class="value">${loadDisplay}</div>
                         <div class="label">${isOffline ? '掉线时长' : '在线'}</div>
                         <div class="value">${uptime}</div>
+                        <div class="label">更新</div>
+                        <div class="value" title="${formatDateTime(node.last_reported)}">${lastSeen}</div>
                     </div>
                 `;
                 container.appendChild(card);
@@ -227,7 +407,11 @@
             if (!node) return;
             const modalBody = document.getElementById('modal-body');
             const isOffline = !node.is_online;
-            
+            const tagsText = Array.isArray(node.tags_array) && node.tags_array.length ? node.tags_array.join(', ') : '未设置';
+            const memText = node.mem_total ? formatBytes(node.mem_total, 2) : 'N/A';
+            const diskText = node.disk_total ? formatBytes(node.disk_total, 2) : 'N/A';
+            const ipText = node.ip || 'N/A';
+
             modalBody.innerHTML = `
                 <div class="modal-header"><h2>${getFlagEmoji(node.country_code)} ${node.name}</h2></div>
                 <div class="modal-info-section">
@@ -236,11 +420,16 @@
                         <div class="modal-info-item"><strong>操作系统:</strong><p>${node.system || 'N/A'}</p></div>
                         <div class="modal-info-item"><strong>架构:</strong><p>${node.arch || 'N/A'}</p></div>
                         <div class="modal-info-item"><strong>CPU 型号:</strong><p>${node.cpu_model || 'N/A'}</p></div>
-                        <div class="modal-info-item"><strong>内存大小:</strong><p>${formatBytes(node.mem_total, 2) || 'N/A'}</p></div>
-                        <div class="modal-info-item"><strong>磁盘大小:</strong><p>${formatBytes(node.disk_total, 2) || 'N/A'}</p></div>
+                        <div class="modal-info-item"><strong>内存大小:</strong><p>${memText}</p></div>
+                        <div class="modal-info-item"><strong>磁盘大小:</strong><p>${diskText}</p></div>
+                        <div class="modal-info-item"><strong>IPv4 / IPv6:</strong><p>${ipText}</p></div>
+                        <div class="modal-info-item"><strong>标签:</strong><p>${tagsText}</p></div>
                         ${isOffline ? `<div class="modal-info-item"><strong>掉线时长:</strong><p>${formatDuration(node.outage_duration || 0)}</p></div>` : ''}
                     </div>
                 </div>
+                <div class="modal-metrics" id="modal-quick-stats"></div>
+                <div class="modal-history-summary" id="modal-history-summary"></div>
+                <div class="modal-outages" id="modal-outages"></div>
                 <div class="chart-grid">
                     <div class="chart-container"><h3>CPU 使用率 (%)</h3><div id="cpu-chart" class="chart-svg">图表加载中...</div></div>
                     <div class="chart-container"><h3>内存使用率 (%)</h3><div id="mem-chart" class="chart-svg">图表加载中...</div></div>
@@ -252,23 +441,46 @@
             modalOverlay.classList.add('active');
 
             try {
-                const response = await fetch(`./api.php?action=get_history&id=${serverId}`);
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                const history = data.history || [];
+                const [detailResponse, historyResponse] = await Promise.all([
+                    fetch(`./api.php?action=get_node_detail&id=${serverId}`),
+                    fetch(`./api.php?action=get_history&id=${serverId}`)
+                ]);
+
+                if (!detailResponse.ok) {
+                    throw new Error(`加载详情失败: ${detailResponse.status}`);
+                }
+                if (!historyResponse.ok) {
+                    throw new Error(`加载历史失败: ${historyResponse.status}`);
+                }
+
+                const detailData = await detailResponse.json();
+                const historyData = await historyResponse.json();
+                if (detailData.error) throw new Error(detailData.error);
+                if (historyData.error) throw new Error(historyData.error);
+
+                renderUptimeMetrics(detailData.node?.uptime);
+                renderHistorySummary(detailData.node?.history_snapshot);
+                renderRecentOutages(detailData.node?.recent_outages);
+
+                const history = historyData.history || [];
                 createSvgChart('cpu-chart', history.map(h => ({ x: h.timestamp, y: h.cpu_usage })), 100);
                 createSvgChart('mem-chart', history.map(h => ({ x: h.timestamp, y: h.mem_usage_percent })), 100);
                 createSvgChart('load-chart', history.map(h => ({ x: h.timestamp, y: h.load_avg })));
                 createSvgChart('net-chart', [
-                    { data: history.map(h => ({ x: h.timestamp, y: (h.net_up_speed || 0) / 1024 })), color: '#2ecc40' }, 
+                    { data: history.map(h => ({ x: h.timestamp, y: (h.net_up_speed || 0) / 1024 })), color: '#2ecc40' },
                     { data: history.map(h => ({ x: h.timestamp, y: (h.net_down_speed || 0) / 1024 })), color: '#0074d9' }
                 ]);
                 createSvgChart('proc-chart', history.map(h => ({ x: h.timestamp, y: h.processes })));
                 createSvgChart('conn-chart', history.map(h => ({ x: h.timestamp, y: h.connections })));
             } catch (err) {
                 console.error('Failed to load history:', err);
-                document.querySelector('.chart-grid').innerHTML = `<p style="color:red; text-align:center;">无法加载数据</p>`;
+                const chartGrid = document.querySelector('.chart-grid');
+                if (chartGrid) {
+                    chartGrid.innerHTML = `<p style="color:red; text-align:center;">无法加载数据</p>`;
+                }
+                renderUptimeMetrics();
+                renderHistorySummary();
+                renderRecentOutages();
             }
         }
 
@@ -330,6 +542,184 @@
             });
         }
 
+        function renderUptimeMetrics(uptimeData = {}) {
+            const container = document.getElementById('modal-quick-stats');
+            if (!container) return;
+
+            const periods = [
+                { key: '24h', label: '24小时可用率' },
+                { key: '7d', label: '7天可用率' },
+                { key: '30d', label: '30天可用率' }
+            ];
+
+            container.innerHTML = '';
+
+            periods.forEach(({ key, label }) => {
+                const metric = uptimeData && uptimeData[key] ? uptimeData[key] : null;
+                const card = document.createElement('div');
+                card.className = 'metric-card';
+
+                if (metric && typeof metric.uptime_percent === 'number') {
+                    if (metric.uptime_percent >= 99.9) {
+                        card.classList.add('ok');
+                    } else if (metric.uptime_percent >= 95) {
+                        card.classList.add('warning');
+                    } else {
+                        card.classList.add('danger');
+                    }
+                }
+
+                const valueText = metric && typeof metric.uptime_percent === 'number'
+                    ? `${formatNumber(metric.uptime_percent, 2)}%`
+                    : '--';
+
+                const uptimeSeconds = metric ? Math.round(metric.uptime_seconds || 0) : 0;
+                const downtimeSeconds = metric ? Math.round(metric.downtime_seconds || 0) : 0;
+                const subtitle = metric
+                    ? `在线 ${formatDuration(uptimeSeconds)} · 故障 ${formatDuration(downtimeSeconds)}`
+                    : '无可用数据';
+
+                card.innerHTML = `
+                    <div class="metric-label">${label}</div>
+                    <div class="metric-value">${valueText}</div>
+                    <div class="metric-subvalue">${subtitle}</div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function renderHistorySummary(snapshot) {
+            const container = document.getElementById('modal-history-summary');
+            if (!container) return;
+
+            container.innerHTML = '';
+
+            if (!snapshot || !snapshot.samples) {
+                const empty = document.createElement('div');
+                empty.className = 'modal-section-empty';
+                empty.textContent = '暂无近期性能数据。';
+                container.appendChild(empty);
+                return;
+            }
+
+            const header = document.createElement('h3');
+            const windowDuration = snapshot.window?.duration;
+            const hasDuration = windowDuration !== null && windowDuration !== undefined;
+            header.textContent = hasDuration ? `近 ${formatDuration(windowDuration)} 指标摘要` : '近期指标摘要';
+            container.appendChild(header);
+
+            const metricsGrid = document.createElement('div');
+            metricsGrid.className = 'history-grid';
+
+            const configs = [
+                { key: 'cpu_usage', label: 'CPU', format: (val) => formatPercent(val), peak: (val) => `峰值 ${formatPercent(val)}` },
+                { key: 'mem_usage_percent', label: '内存', format: (val) => formatPercent(val), peak: (val) => `峰值 ${formatPercent(val)}` },
+                { key: 'disk_usage_percent', label: '硬盘', format: (val) => formatPercent(val), peak: (val) => `峰值 ${formatPercent(val)}` },
+                { key: 'load_avg', label: '负载', format: (val) => formatNumber(val, 2), peak: (val) => `峰值 ${formatNumber(val, 2)}` },
+                { key: 'net_up_speed', label: '上行速度', format: (val) => `${formatBytes(val || 0)}/s`, peak: (val) => `峰值 ${formatBytes(val || 0)}/s` },
+                { key: 'net_down_speed', label: '下行速度', format: (val) => `${formatBytes(val || 0)}/s`, peak: (val) => `峰值 ${formatBytes(val || 0)}/s` }
+            ];
+
+            configs.forEach(config => {
+                const stats = snapshot.metrics?.[config.key];
+                if (!stats) return;
+
+                const item = document.createElement('div');
+                item.className = 'history-metric';
+                item.innerHTML = `
+                    <div class="history-label">${config.label}</div>
+                    <div class="history-value">${config.format(stats.avg)}</div>
+                    <div class="history-subvalue">${config.peak(stats.max)}</div>
+                `;
+                metricsGrid.appendChild(item);
+            });
+
+            if (metricsGrid.children.length > 0) {
+                container.appendChild(metricsGrid);
+            }
+
+            const rangeParts = [];
+            const startText = snapshot.window?.start ? formatDateTime(snapshot.window.start) : '';
+            const endText = snapshot.window?.end ? formatDateTime(snapshot.window.end) : '';
+            if (startText) {
+                rangeParts.push(startText);
+            }
+            if (endText) {
+                rangeParts.push(endText);
+            }
+
+            const footnote = document.createElement('div');
+            footnote.className = 'history-summary-footnote';
+            footnote.textContent = `覆盖 ${snapshot.samples} 条记录${rangeParts.length === 2 ? ` · ${rangeParts[0]} → ${rangeParts[1]}` : ''}`;
+            container.appendChild(footnote);
+
+            if (snapshot.transfer && (snapshot.transfer.up !== null || snapshot.transfer.down !== null)) {
+                const transferNote = document.createElement('div');
+                transferNote.className = 'history-summary-footnote';
+                const upText = snapshot.transfer.up !== null ? formatBytes(snapshot.transfer.up) : '--';
+                const downText = snapshot.transfer.down !== null ? formatBytes(snapshot.transfer.down) : '--';
+                transferNote.textContent = `期间累计流量 ↑ ${upText} / ↓ ${downText}`;
+                container.appendChild(transferNote);
+            }
+        }
+
+        function renderRecentOutages(outages = []) {
+            const container = document.getElementById('modal-outages');
+            if (!container) return;
+
+            container.innerHTML = '<h3>近期告警</h3>';
+
+            if (!outages || outages.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'modal-section-empty';
+                empty.textContent = '最近没有掉线记录。';
+                container.appendChild(empty);
+                return;
+            }
+
+            const list = document.createElement('ul');
+            list.className = 'outage-list';
+
+            outages.forEach(outage => {
+                const item = document.createElement('li');
+                item.className = 'outage-item';
+                if (!outage.end_time) {
+                    item.classList.add('active');
+                }
+
+                const title = document.createElement('div');
+                title.className = 'outage-title';
+                title.textContent = outage.title || '未命名告警';
+
+                const time = document.createElement('div');
+                time.className = 'outage-time';
+                const timeParts = [];
+                if (outage.start_time) {
+                    timeParts.push(`发生 ${formatDateTime(outage.start_time)}`);
+                }
+                if (outage.end_time) {
+                    timeParts.push(`恢复 ${formatDateTime(outage.end_time)}`);
+                }
+                if (outage.duration) {
+                    timeParts.push(`持续 ${formatDuration(outage.duration)}`);
+                }
+                time.textContent = timeParts.join(' · ') || '时间未知';
+
+                const content = document.createElement('div');
+                content.className = 'outage-content';
+                content.textContent = outage.content || '无描述';
+
+                item.appendChild(title);
+                item.appendChild(time);
+                item.appendChild(content);
+
+                list.appendChild(item);
+            });
+
+            container.appendChild(list);
+        }
+
         function generateOutagesView(outages, nodes) {
             const container = document.querySelector('#outages-view .timeline');
             container.innerHTML = '';
@@ -344,6 +734,8 @@
                 let content = outage.content;
                 if (outage.end_time) {
                     content += `<br>已恢复，持续时间约 ${formatDuration(outage.end_time - outage.start_time)}.`;
+                } else if (outage.duration) {
+                    content += `<br>已持续 ${formatDuration(outage.duration)}.`;
                 }
                 const itemHTML = `<div class="timeline-item ${!outage.end_time ? 'critical' : ''}"><div class="time">${startTime}</div><div class="title">${outage.title} - ${nodeName}</div><div class="content">${content}</div></div>`;
                 container.innerHTML += itemHTML;
@@ -352,7 +744,7 @@
 
         function fireSignal(nodes) {
             if (!nodes) return;
-            const availableNodes = nodes.filter(n => n.is_online && n.x && n.y);
+            const availableNodes = nodes.filter(n => n.is_online && !n.is_stale && Number.isFinite(Number(n.x)) && Number.isFinite(Number(n.y)));
             if (availableNodes.length < 2) return;
             let startNode = availableNodes[Math.floor(Math.random() * availableNodes.length)];
             let endNode = availableNodes[Math.floor(Math.random() * availableNodes.length)];
@@ -368,10 +760,10 @@
             const scaleX = containerRect.width / viewBox.width;
             const scaleY = containerRect.height / viewBox.height;
             
-            const startX = (startNode.y - viewBox.x) * scaleX;
-            const startY = (startNode.x - viewBox.y) * scaleY;
-            const endX = (endNode.y - viewBox.x) * scaleX;
-            const endY = (endNode.x - viewBox.y) * scaleY;
+            const startX = (Number(startNode.y) - viewBox.x) * scaleX;
+            const startY = (Number(startNode.x) - viewBox.y) * scaleY;
+            const endX = (Number(endNode.y) - viewBox.x) * scaleX;
+            const endY = (Number(endNode.x) - viewBox.y) * scaleY;
 
             const dx = endX - startX; const dy = endY - startY;
             const angle = Math.atan2(dy, dx) * 180 / Math.PI;

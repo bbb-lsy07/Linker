@@ -13,6 +13,9 @@ require_once __DIR__ . '/../config.php';
 // 加载数据库连接函数
 require_once __DIR__ . '/database.php';
 
+// 通用辅助函数
+require_once __DIR__ . '/helpers.php';
+
 // 未来可以在这里添加其他通用函数库
 // require_once __DIR__ . '/helpers.php';
 // require_once __DIR__ . '/auth.php';

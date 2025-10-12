@@ -1,5 +1,5 @@
 <?php
-// api.php - Provides monitoring data to the frontend v2.3 (Final)
+// api.php - Provides monitoring data to the frontend
 ini_set('display_errors', 0);
 error_reporting(0);
 header('Content-Type: application/json');
@@ -20,15 +20,16 @@ try {
         $history = $stmt_history->fetchAll(PDO::FETCH_ASSOC);
 
         $typed_history = array_map(function($record) {
-            foreach($record as $key => $value) {
-                if ($value !== null && is_numeric($value)) {
-                    $record[$key] = strpos($value, '.') === false ? (int)$value : (float)$value;
-                }
-            }
-            return $record;
+            return linker_normalise_stats($record);
         }, $history);
 
-        echo json_encode(['history' => array_reverse($typed_history)]);
+        $ordered_history = array_reverse($typed_history);
+        $insights = linker_compute_history_insights($ordered_history);
+
+        echo json_encode([
+            'history' => $ordered_history,
+            'insights' => $insights,
+        ]);
         exit;
 
     } elseif ($action === 'get_all') {
@@ -36,7 +37,8 @@ try {
         $response = [
             'nodes' => [],
             'outages' => [],
-            'site_name' => '灵刻监控'
+            'site_name' => '灵刻监控',
+            'summary' => []
         ];
         
         $stmt_site_name = $pdo->prepare("SELECT value FROM settings WHERE `key` = 'site_name'");
@@ -71,24 +73,38 @@ try {
             $node_id = $node['id'];
             $node['x'] = (float)($node['latitude'] ?? 0);
             $node['y'] = (float)($node['longitude'] ?? 0);
-            $node['stats'] = $latest_stats[$node_id] ?? [];
-            
+            $node['mem_total'] = linker_cast_numeric($node['mem_total'] ?? null);
+            $node['disk_total'] = linker_cast_numeric($node['disk_total'] ?? null);
+            $node['price_usd_yearly'] = linker_cast_numeric($node['price_usd_yearly'] ?? null);
+
+            $latest_stat = $latest_stats[$node_id] ?? [];
+            $node['stats'] = !empty($latest_stat) ? linker_normalise_stats($latest_stat) : [];
+
             $status_info = $online_status[$node_id] ?? ['is_online' => false, 'last_checked' => 0];
             $node['is_online'] = (bool)$status_info['is_online'];
-            
+            $node['last_checked'] = isset($status_info['last_checked']) ? (int)$status_info['last_checked'] : null;
+
             if (!$node['is_online'] && $status_info['last_checked'] > 0) {
                  $node['anomaly_msg'] = '服务器掉线';
                  $node['outage_duration'] = time() - $status_info['last_checked'];
             }
-            
+
+            if (!empty($node['price_usd_yearly'])) {
+                $node['price_usd_monthly'] = round(((float)$node['price_usd_yearly']) / 12.0, 2);
+            }
+
             $node['history'] = []; // History is no longer included in the main payload
 
             $response['nodes'][] = $node;
         }
 
         $response['outages'] = $pdo->query("SELECT * FROM outages ORDER BY start_time DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC);
+        $response['summary'] = linker_compute_summary($response['nodes']);
 
         echo json_encode($response);
+    } else {
+        http_response_code(400);
+        echo json_encode(['error' => 'Unsupported action']);
     }
 
 } catch (Exception $e) {

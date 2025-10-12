@@ -22,8 +22,30 @@
         .signal { position: absolute; height: 3px; background: var(--signal-color); border-radius: 2px; opacity: 0; pointer-events: none; transform-origin: left center; }
 
         /* Card View Styles */
-        #standalones-view { padding: 1rem; display: flex; flex-direction: column; }
-        .tag-filters { flex-shrink: 0; padding-bottom: 1rem; }
+        #standalones-view { padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
+        .summary-card { background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.25rem; }
+        .summary-card .summary-label { font-size: 0.75rem; color: #666; letter-spacing: 0.05em; text-transform: uppercase; }
+        .summary-card .summary-value { font-size: 1.4rem; font-weight: bold; }
+        .summary-card .summary-subtitle { font-size: 0.75rem; color: #999; }
+        .summary-card.critical { border-color: var(--anomaly-color); }
+        .summary-card.warning { border-color: var(--warning-color); }
+        .alert-panel { display: grid; gap: 0.75rem; }
+        .alert-panel .alert-item { background: #fff; border: 1px solid var(--border-color); border-left: 4px solid var(--button-active-bg); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; transition: box-shadow 0.2s ease; }
+        .alert-panel .alert-item.critical { border-left-color: var(--anomaly-color); }
+        .alert-panel .alert-item.warning { border-left-color: var(--warning-color); }
+        .alert-panel .alert-item:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.08); }
+        .alert-panel .alert-text { flex: 1; }
+        .alert-panel .alert-title { font-weight: bold; margin-bottom: 0.2rem; }
+        .alert-panel .alert-meta { font-size: 0.75rem; color: #666; text-align: right; min-width: 120px; }
+        .alert-panel .empty { border: 1px dashed var(--border-color); border-radius: 8px; padding: 0.75rem 1rem; color: #666; background: rgba(0,0,0,0.02); }
+        .filter-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+        .search-group { flex: 1 1 200px; }
+        .search-group input { width: 100%; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-family: "Victor Mono", monospace; }
+        .status-filters { display: flex; gap: 0.5rem; }
+        .status-filters button { font-family: "Victor Mono", monospace; border: 1px solid var(--border-color); background-color: var(--button-bg); color: var(--text-color); padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; transition: all 0.2s ease; }
+        .status-filters button.active { background-color: var(--button-active-bg); color: var(--button-active-text); border-color: var(--button-active-bg); }
+        .tag-filters { flex-shrink: 0; padding-bottom: 0.5rem; }
         .tag-filters button { font-family: "Victor Mono", monospace; border: 1px solid var(--border-color); background-color: var(--button-bg); color: var(--text-color); padding: 4px 10px; font-size: 12px; cursor: pointer; margin-right: 8px; margin-bottom: 5px; border-radius: 15px; }
         .tag-filters button.active { background-color: var(--button-active-bg); color: var(--button-active-text); border-color: var(--button-active-bg); }
         .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem; width: 100%; }
@@ -38,6 +60,7 @@
         .card-header .name { font-size: 1.1rem; font-weight: bold; flex-grow: 1;}
         .card-header .status-icon { width: 12px; height: 12px; border-radius: 50%; background-color: var(--uptime-good); }
         .card-header .status-icon.down { background-color: var(--uptime-bad); }
+        .card-intro { margin-top: -0.5rem; margin-bottom: 1rem; color: #666; font-size: 0.8rem; line-height: 1.4; }
 
         .stat-grid { display: grid; grid-template-columns: 50px 1fr; gap: 0.8rem; align-items: center; }
         .stat-grid .label { color: #666; text-align: right; }
@@ -47,6 +70,9 @@
         .progress-cpu { background-color: var(--progress-cpu); }
         .progress-mem { background-color: var(--progress-mem); }
         .progress-disk { background-color: var(--progress-disk); }
+        .card-meta { margin-top: 1rem; font-size: 0.75rem; color: #666; display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between; }
+        .card-meta span { display: flex; align-items: center; gap: 0.3rem; }
+        .empty-state { text-align: center; padding: 2rem; border: 1px dashed var(--border-color); border-radius: 8px; color: #666; background: rgba(0,0,0,0.02); }
         
         /* Pagination */
         .pagination { display: flex; justify-content: center; padding: 1.5rem 0; gap: 0.5rem; }
@@ -66,6 +92,12 @@
         .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
         .modal-info-item strong { color: #555; display: block; margin-bottom: 0.3rem;}
         .modal-info-item p { margin: 0; color: #333; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+        .modal-insights { margin-bottom: 1.5rem; }
+        .modal-insights h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .modal-insights ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+        .modal-insights li { background: #f9f9f9; border-radius: 6px; padding: 0.75rem; font-size: 0.85rem; }
+        .modal-insights .context { display: block; margin-top: 0.2rem; font-size: 0.75rem; color: #999; }
         
         .chart-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; }
         @media (min-width: 768px) { .chart-grid { grid-template-columns: 1fr 1fr; } }
@@ -96,4 +128,6 @@
         @media (max-width: 768px) {
             .header-controls { flex-direction: column; align-items: flex-start; gap: 10px; }
             .controls { justify-content: flex-start; }
+            .filter-toolbar { flex-direction: column; align-items: stretch; }
+            .status-filters { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
         }

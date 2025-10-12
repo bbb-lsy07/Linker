@@ -1,10 +1,12 @@
     document.addEventListener('DOMContentLoaded', () => {
-        let monitorData = { nodes: [], outages: [], site_name: '灵刻监控' };
+        let monitorData = { nodes: [], outages: [], site_name: '灵刻监控', summary: {} };
         let activeButton = document.querySelector('.controls button[data-view="map"]');
         let signalInterval = null;
         let activeTags = new Set();
         let currentPage = 1;
         const itemsPerPage = 18;
+        let searchQuery = '';
+        let statusFilter = 'all';
 
 
         const tooltip = document.getElementById('tooltip');
@@ -13,6 +15,14 @@
         const views = document.querySelectorAll('.view');
         const modalOverlay = document.getElementById('details-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
+        const summaryContainer = document.querySelector('.summary-grid');
+        const alertPanel = document.querySelector('.alert-panel');
+        const searchInput = document.getElementById('server-search');
+        const statusFilterContainer = document.querySelector('.status-filters');
+        const locale = (navigator.language && navigator.language.length) ? navigator.language : 'zh-CN';
+        const localeToUse = locale.startsWith('zh') ? 'zh-CN' : locale;
+        const relativeFormatter = new Intl.RelativeTimeFormat(localeToUse, { numeric: 'auto' });
+        const dateTimeFormatter = new Intl.DateTimeFormat(localeToUse, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 
         function displayError(message) {
@@ -59,7 +69,135 @@
             return `${(seconds / 86400).toFixed(1)} 天`;
         }
 
+        function formatCurrency(value) {
+            if (value === null || value === undefined || value === '') return '—';
+            const numberValue = Number(value);
+            if (Number.isNaN(numberValue)) return '—';
+            return `$${numberValue.toFixed(2)}`;
+        }
+
+        function formatRelativeTime(timestamp) {
+            if (!timestamp) return '未知';
+            const tsMs = timestamp > 1e12 ? timestamp : timestamp * 1000;
+            const diffSeconds = Math.round((tsMs - Date.now()) / 1000);
+            const absSeconds = Math.abs(diffSeconds);
+            const ranges = [
+                { limit: 60, divisor: 1, unit: 'second' },
+                { limit: 3600, divisor: 60, unit: 'minute' },
+                { limit: 86400, divisor: 3600, unit: 'hour' },
+                { limit: 604800, divisor: 86400, unit: 'day' },
+                { limit: 2629800, divisor: 604800, unit: 'week' }
+            ];
+            for (const range of ranges) {
+                if (absSeconds < range.limit) {
+                    return relativeFormatter.format(Math.round(diffSeconds / range.divisor), range.unit);
+                }
+            }
+            return relativeFormatter.format(Math.round(diffSeconds / 2629800), 'month');
+        }
+
+        function formatAbsoluteTime(timestamp) {
+            if (!timestamp) return '';
+            const tsMs = timestamp > 1e12 ? timestamp : timestamp * 1000;
+            return dateTimeFormatter.format(new Date(tsMs));
+        }
+
+        function shouldFlagHighLoad(node) {
+            if (!node || !node.stats || !node.is_online) return false;
+            const cpu = Number(node.stats.cpu_usage || 0);
+            const load = Number(node.stats.load_avg || 0);
+            return cpu >= 85 || load >= 2.5;
+        }
+
+        function renderSummary(summary = {}, nodes = []) {
+            if (!summaryContainer) return;
+            const totalNodes = summary.total_nodes ?? nodes.length;
+            const onlineNodes = summary.online_nodes ?? nodes.filter(node => node.is_online).length;
+            const offlineNodes = summary.offline_nodes ?? Math.max(totalNodes - onlineNodes, 0);
+            const highLoadNodes = summary.high_load_nodes ?? nodes.filter(node => shouldFlagHighLoad(node)).length;
+            const regionList = (summary.regions || []).slice(0, 3).map(region => `${getFlagEmoji(region.code)}${region.code}(${region.count})`).join('、');
+            const topTags = (summary.top_tags || []).slice(0, 3).map(tag => `${tag.tag}(${tag.count})`).join('、');
+            const avgCpu = summary.avg_cpu != null ? Number(summary.avg_cpu).toFixed(1) + '%' : '—';
+            const avgMem = summary.avg_mem != null ? Number(summary.avg_mem).toFixed(1) + '%' : '—';
+            const avgLoad = summary.avg_load != null ? Number(summary.avg_load).toFixed(2) : '—';
+            const lastUpdatedRelative = summary.last_updated ? formatRelativeTime(summary.last_updated) : '暂无数据';
+            const lastUpdatedAbsolute = summary.last_updated ? formatAbsoluteTime(summary.last_updated) : '';
+
+            const cards = [
+                { label: '节点总数', value: totalNodes, subtitle: regionList ? `覆盖 ${regionList}` : '' },
+                { label: '在线节点', value: onlineNodes, subtitle: totalNodes ? `占比 ${(onlineNodes / totalNodes * 100).toFixed(0)}%` : '' },
+                { label: '离线节点', value: offlineNodes, subtitle: offlineNodes ? '请立即关注' : '全部正常', type: offlineNodes ? 'critical' : '' },
+                { label: '高负载节点', value: highLoadNodes, subtitle: highLoadNodes ? '建议扩容或排查' : '运行平稳', type: highLoadNodes ? 'warning' : '' },
+                { label: '平均 CPU', value: avgCpu, subtitle: `平均内存 ${avgMem} • 平均负载 ${avgLoad}` },
+                { label: '预计成本', value: formatCurrency(summary.total_monthly_cost), subtitle: topTags ? `热门标签 ${topTags}` : '' },
+                { label: '最近更新时间', value: lastUpdatedRelative, subtitle: lastUpdatedAbsolute }
+            ];
+
+            summaryContainer.innerHTML = cards.map(card => {
+                const subtitle = card.subtitle ? `<div class="summary-subtitle">${card.subtitle}</div>` : '';
+                return `<div class="summary-card ${card.type || ''}"><div class="summary-label">${card.label}</div><div class="summary-value">${card.value}</div>${subtitle}</div>`;
+            }).join('');
+        }
+
+        function renderAlerts(alerts = []) {
+            if (!alertPanel) return;
+            if (!alerts.length) {
+                alertPanel.innerHTML = '<div class="empty">所有节点运行良好。</div>';
+                return;
+            }
+
+            const topAlerts = alerts.slice(0, 4);
+            alertPanel.innerHTML = topAlerts.map(alert => {
+                const flag = getFlagEmoji(alert.country_code);
+                const title = `${flag} ${alert.name || alert.id}`;
+                const metaSegments = [];
+                if (alert.severity === 'critical' && alert.duration) {
+                    metaSegments.push(`离线 ${formatDuration(alert.duration)}`);
+                }
+                if (alert.metric) {
+                    const metricParts = [];
+                    if (alert.metric.cpu != null) metricParts.push(`CPU ${Math.round(alert.metric.cpu)}%`);
+                    if (alert.metric.load != null) metricParts.push(`负载 ${Number(alert.metric.load).toFixed(2)}`);
+                    if (metricParts.length) metaSegments.push(metricParts.join(' / '));
+                }
+                if (alert.last_checked) {
+                    metaSegments.push(formatRelativeTime(alert.last_checked));
+                }
+                const metaHtml = metaSegments.length ? metaSegments.join('<br>') : '&nbsp;';
+                return `<div class="alert-item ${alert.severity}" data-server-id="${alert.id}"><div class="alert-text"><div class="alert-title">${title}</div><div>${alert.message || ''}</div></div><div class="alert-meta">${metaHtml}</div></div>`;
+            }).join('');
+        }
+
+        function updateStatusFilterButtons() {
+            if (!statusFilterContainer) return;
+            statusFilterContainer.querySelectorAll('button[data-status]').forEach(button => {
+                button.classList.toggle('active', button.dataset.status === statusFilter);
+            });
+        }
+
+        function renderModalInsights(insights = []) {
+            const container = document.getElementById('modal-insights-list');
+            if (!container) return;
+            if (!insights.length) {
+                container.innerHTML = '<li>暂无统计数据。</li>';
+                return;
+            }
+            container.innerHTML = insights.map(item => {
+                const context = item.context ? `<span class="context">${item.context}</span>` : '';
+                const time = item.timestamp ? `<span class="context">${formatAbsoluteTime(item.timestamp)}</span>` : '';
+                return `<li><strong>${item.label}</strong><br>${item.value}${context}${time}</li>`;
+            }).join('');
+        }
+
         function renderAllViews() {
+            if (summaryContainer) {
+                renderSummary(monitorData.summary || {}, monitorData.nodes);
+            }
+            if (alertPanel) {
+                const alerts = monitorData.summary && Array.isArray(monitorData.summary.alerts) ? monitorData.summary.alerts : [];
+                renderAlerts(alerts);
+            }
+            updateStatusFilterButtons();
             initializeMap(monitorData.nodes);
             generateStandalonesView(monitorData.nodes);
             generateOutagesView(monitorData.outages, monitorData.nodes);
@@ -79,6 +217,39 @@
         modalOverlay.addEventListener('click', (e) => {
             if (e.target === modalOverlay) modalOverlay.classList.remove('active');
         });
+
+        if (searchInput) {
+            let searchDebounce;
+            searchInput.addEventListener('input', (event) => {
+                const value = event.target.value.toLowerCase();
+                clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(() => {
+                    searchQuery = value.trim();
+                    currentPage = 1;
+                    generateStandalonesView(monitorData.nodes);
+                }, 200);
+            });
+        }
+
+        if (statusFilterContainer) {
+            statusFilterContainer.addEventListener('click', (event) => {
+                const button = event.target.closest('button[data-status]');
+                if (!button) return;
+                statusFilter = button.dataset.status;
+                currentPage = 1;
+                updateStatusFilterButtons();
+                generateStandalonesView(monitorData.nodes);
+            });
+        }
+
+        if (alertPanel) {
+            alertPanel.addEventListener('click', (event) => {
+                const item = event.target.closest('.alert-item');
+                if (!item) return;
+                const serverId = item.dataset.serverId;
+                if (serverId) showDetailsModal(serverId);
+            });
+        }
 
         function switchView(viewId) {
             views.forEach(view => view.classList.remove('active'));
@@ -125,20 +296,43 @@
 
         function generateStandalonesView(nodes) {
             const container = document.querySelector('#standalones-view .card-grid');
+            if (!container) return;
             container.innerHTML = '';
-            
+
             const filteredNodes = nodes.filter(node => {
                 const nodeTags = node.tags ? node.tags.split(',').map(t => t.trim()) : [];
-                return activeTags.size === 0 || [...activeTags].every(tag => nodeTags.includes(tag));
+                const matchesTags = activeTags.size === 0 || [...activeTags].every(tag => nodeTags.includes(tag));
+                if (!matchesTags) return false;
+
+                const searchTarget = `${node.name || ''} ${node.intro || ''} ${node.country_code || ''} ${node.tags || ''}`.toLowerCase();
+                const matchesSearch = !searchQuery || searchTarget.includes(searchQuery);
+                if (!matchesSearch) return false;
+
+                const isOffline = !node.is_online;
+                const highLoad = shouldFlagHighLoad(node);
+
+                if (statusFilter === 'online' && isOffline) return false;
+                if (statusFilter === 'offline' && !isOffline) return false;
+                if (statusFilter === 'highload' && !highLoad) return false;
+                return true;
             });
+
+            if (filteredNodes.length === 0) {
+                container.innerHTML = '<div class="empty-state">没有符合条件的服务器。</div>';
+                renderPaginationControls(0);
+                return;
+            }
+
+            const totalPages = Math.max(1, Math.ceil(filteredNodes.length / itemsPerPage));
+            if (currentPage > totalPages) currentPage = totalPages;
 
             const paginatedNodes = filteredNodes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
             paginatedNodes.forEach(node => {
                 const stats = node.stats || {};
                 const isOffline = !node.is_online;
-                const isHighLoad = !isOffline && stats.load_avg > 2.0;
-                
+                const isHighLoad = shouldFlagHighLoad(node);
+
                 let cardClass = 'server-card';
                 if (isOffline) cardClass += ' offline';
                 if (isHighLoad) cardClass += ' high-load';
@@ -150,13 +344,34 @@
                 const cpu = parseFloat(stats.cpu_usage || 0);
                 const mem = parseFloat(stats.mem_usage_percent || 0);
                 const disk = parseFloat(stats.disk_usage_percent || 0);
-                const uptime = isOffline ? (formatDuration(node.outage_duration || 0)) : (stats.uptime || '...');
+                const uptime = isOffline ? formatDuration(node.outage_duration || 0) : (stats.uptime || '...');
+                const introHtml = node.intro ? `<p class="card-intro">${node.intro}</p>` : '';
+                const statTimestamp = stats.timestamp ? formatRelativeTime(stats.timestamp) : '';
+                const statTimestampTitle = stats.timestamp ? formatAbsoluteTime(stats.timestamp) : '';
+                const priceText = node.price_usd_monthly != null
+                    ? `${formatCurrency(node.price_usd_monthly)}/月`
+                    : (node.price_usd_yearly != null ? `${formatCurrency(node.price_usd_yearly)}/年` : '');
+
+                const metaSegments = [];
+                if (priceText) metaSegments.push(`<span>💰 ${priceText}</span>`);
+                if (node.country_code) metaSegments.push(`<span>${getFlagEmoji(node.country_code)} ${node.country_code.toUpperCase()}</span>`);
+                if (node.tags) metaSegments.push(`<span>🏷 ${node.tags}</span>`);
+                if (isOffline) {
+                    const offlineInfo = node.outage_duration ? formatDuration(node.outage_duration) : '未知';
+                    const offlineTitle = node.last_checked ? formatAbsoluteTime(node.last_checked) : '';
+                    metaSegments.push(`<span title="${offlineTitle}">⚠️ ${offlineInfo}</span>`);
+                } else if (statTimestamp) {
+                    metaSegments.push(`<span title="${statTimestampTitle}">⏱ ${statTimestamp}</span>`);
+                }
+
+                const metaHtml = metaSegments.length ? `<div class="card-meta">${metaSegments.join('')}</div>` : '';
 
                 card.innerHTML = `
                     <div class="card-header">
                         <div class="status-icon ${isOffline ? 'down' : ''}"></div>
                         <div class="name">${getFlagEmoji(node.country_code)} ${node.name}</div>
                     </div>
+                    ${introHtml}
                     <div class="stat-grid">
                         <div class="label">CPU</div>
                         <div class="progress-bar"><div class="progress-bar-inner progress-cpu" style="width: ${cpu.toFixed(0)}%;">${cpu.toFixed(0)}%</div></div>
@@ -173,6 +388,7 @@
                         <div class="label">${isOffline ? '掉线时长' : '在线'}</div>
                         <div class="value">${uptime}</div>
                     </div>
+                    ${metaHtml}
                 `;
                 container.appendChild(card);
                 card.addEventListener('click', () => showDetailsModal(node.id));
@@ -182,9 +398,11 @@
 
         function renderPaginationControls(totalItems) {
             const container = document.querySelector('.pagination');
+            if (!container) return;
             container.innerHTML = '';
             const totalPages = Math.ceil(totalItems / itemsPerPage);
             if (totalPages <= 1) return;
+            if (currentPage > totalPages) currentPage = totalPages;
 
             for (let i = 1; i <= totalPages; i++) {
                 const button = document.createElement('button');
@@ -206,7 +424,12 @@
             const allButton = document.createElement('button');
             allButton.textContent = '全部';
             allButton.className = activeTags.size === 0 ? 'active' : '';
-            allButton.onclick = () => { activeTags.clear(); currentPage = 1; renderAllViews(); };
+            allButton.onclick = () => {
+                activeTags.clear();
+                currentPage = 1;
+                generateStandalonesView(monitorData.nodes);
+                generateTagFilters(monitorData.nodes);
+            };
             container.appendChild(allButton);
 
             allTags.forEach(tag => {
@@ -216,7 +439,8 @@
                 button.onclick = () => {
                     activeTags.has(tag) ? activeTags.delete(tag) : activeTags.add(tag);
                     currentPage = 1;
-                    renderAllViews();
+                    generateStandalonesView(monitorData.nodes);
+                    generateTagFilters(monitorData.nodes);
                 };
                 container.appendChild(button);
             });
@@ -241,6 +465,10 @@
                         ${isOffline ? `<div class="modal-info-item"><strong>掉线时长:</strong><p>${formatDuration(node.outage_duration || 0)}</p></div>` : ''}
                     </div>
                 </div>
+                <div class="modal-insights">
+                    <h3>运行摘要</h3>
+                    <ul id="modal-insights-list"><li>加载中...</li></ul>
+                </div>
                 <div class="chart-grid">
                     <div class="chart-container"><h3>CPU 使用率 (%)</h3><div id="cpu-chart" class="chart-svg">图表加载中...</div></div>
                     <div class="chart-container"><h3>内存使用率 (%)</h3><div id="mem-chart" class="chart-svg">图表加载中...</div></div>
@@ -255,13 +483,14 @@
                 const response = await fetch(`./api.php?action=get_history&id=${serverId}`);
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
-                
+
                 const history = data.history || [];
+                renderModalInsights(data.insights || []);
                 createSvgChart('cpu-chart', history.map(h => ({ x: h.timestamp, y: h.cpu_usage })), 100);
                 createSvgChart('mem-chart', history.map(h => ({ x: h.timestamp, y: h.mem_usage_percent })), 100);
                 createSvgChart('load-chart', history.map(h => ({ x: h.timestamp, y: h.load_avg })));
                 createSvgChart('net-chart', [
-                    { data: history.map(h => ({ x: h.timestamp, y: (h.net_up_speed || 0) / 1024 })), color: '#2ecc40' }, 
+                    { data: history.map(h => ({ x: h.timestamp, y: (h.net_up_speed || 0) / 1024 })), color: '#2ecc40' },
                     { data: history.map(h => ({ x: h.timestamp, y: (h.net_down_speed || 0) / 1024 })), color: '#0074d9' }
                 ]);
                 createSvgChart('proc-chart', history.map(h => ({ x: h.timestamp, y: h.processes })));
@@ -269,6 +498,8 @@
             } catch (err) {
                 console.error('Failed to load history:', err);
                 document.querySelector('.chart-grid').innerHTML = `<p style="color:red; text-align:center;">无法加载数据</p>`;
+                const insightList = document.getElementById('modal-insights-list');
+                if (insightList) insightList.innerHTML = '<li>无法加载运行摘要</li>';
             }
         }
 

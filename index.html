@@ -980,6 +980,19 @@
                 </div>
             </div>
             <div id="standalones-view" class="view">
+                <div class="summary-grid" aria-live="polite"></div>
+                <div class="alert-panel" aria-live="polite"></div>
+                <div class="filter-toolbar">
+                    <div class="search-group">
+                        <input type="search" id="server-search" placeholder="搜索服务器、标签或地区..." aria-label="搜索服务器">
+                    </div>
+                    <div class="status-filters" role="group" aria-label="状态筛选">
+                        <button data-status="all" class="active">全部</button>
+                        <button data-status="online">在线</button>
+                        <button data-status="offline">离线</button>
+                        <button data-status="highload">高负载</button>
+                    </div>
+                </div>
                 <div class="tag-filters"></div>
                 <div class="card-grid"></div>
                 <div class="pagination"></div>
